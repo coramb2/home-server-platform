@@ -1,0 +1,50 @@
+# Copy to compose.yaml and fill in .env. The real compose.yaml + Caddyfile are
+# gitignored so a real hostname never lands in git. Pinned image tags only.
+name: home-server-platform
+
+services:
+  caddy:
+    image: caddy:2.8-alpine
+    restart: unless-stopped
+    ports:
+      - "443:443"          # reachable only over the Tailscale interface in practice
+    environment:
+      - PLATFORM_HOST=${PLATFORM_HOST}   # your *.ts.net name, from .env
+    volumes:
+      - ./caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./apps/shell/build:/srv/shell:ro # SvelteKit static build (adapter-static)
+      - caddy_data:/data
+      - caddy_config:/config
+      # TLS: provided by the Tailscale cert at server-implementation time
+      # (mount the cert dir, or use the caddy-tailscale plugin). Placeholder:
+      - ${TS_CERT_DIR:-./caddy/certs}:/certs:ro
+    depends_on:
+      - pocketbase
+    networks: [platform]
+
+  pocketbase:
+    build:
+      context: ./modules/tickets
+      args:
+        PB_VERSION: "0.39.6"
+    restart: unless-stopped
+    environment:
+      - PB_ADMIN_EMAIL=${PB_ADMIN_EMAIL}
+      - PB_ADMIN_PASSWORD=${PB_ADMIN_PASSWORD}
+    volumes:
+      - pb_data:/pb/pb_data
+    # No published ports: reachable only inside the platform network, via Caddy.
+    networks: [platform]
+
+  # ── Network module (traffic analyzer) attaches here at server time. ──
+  # It ships its own compose in modules/network; route /api/network/* to its
+  # dashboard service. Keep it isolated — it holds CAP_NET_RAW. See ARCHITECTURE §9.
+
+volumes:
+  caddy_data:
+  caddy_config:
+  pb_data:
+
+networks:
+  platform:
+    driver: bridge

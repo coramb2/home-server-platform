@@ -29,6 +29,9 @@ docker-compose.yaml
 docker-compose.yml
 !*.example
 
+# ─── Local dev tooling (not committed) ───────────────────────────────────
+.pocketbase-local/
+
 # ─── App data & backups: NEVER commit ────────────────────────────────────
 pb_data/
 *.db
