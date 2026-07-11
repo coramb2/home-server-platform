@@ -1,0 +1,32 @@
+# Caddyfile TEMPLATE — copy to ../Caddyfile and replace the hostname.
+# The real Caddyfile (with your actual ts.net name) is gitignored.
+#
+# Prereqs: run Caddy inside the tailnet and enable Tailscale HTTPS certs so the
+# *.ts.net cert is publicly trusted on iOS (required for PWA install + Web Push).
+# See: https://tailscale.com/kb/1153/enabling-https
+
+{$PLATFORM_HOST} {
+	encode gzip
+
+	# Tickets backend (PocketBase)
+	handle_path /api/tickets/* {
+		reverse_proxy pocketbase:8090
+	}
+
+	# Network module (analyzer dashboard API)
+	handle_path /api/network/* {
+		reverse_proxy analyzer-dashboard:8080
+	}
+
+	# Media module (future)
+	# handle_path /api/media/* {
+	# 	reverse_proxy jellyfin:8096
+	# }
+
+	# SvelteKit shell (static build) — SPA fallback
+	handle {
+		root * /srv/shell
+		try_files {path} /index.html
+		file_server
+	}
+}

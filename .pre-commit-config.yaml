@@ -1,0 +1,23 @@
+# Pre-commit hooks. Install once:
+#   pip install pre-commit    (or: brew install pre-commit)
+#   pre-commit install
+# Now every `git commit` is scanned; a detected secret blocks the commit.
+#
+# Run against all history at any time:
+#   pre-commit run gitleaks --all-files
+#   gitleaks detect --source . --log-opts="--all"   # full-history scan
+
+repos:
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.21.2
+    hooks:
+      - id: gitleaks
+
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: check-added-large-files      # blocks accidental pcaps / db dumps
+        args: ["--maxkb=2048"]
+      - id: detect-private-key
+      - id: end-of-file-fixer
+      - id: trailing-whitespace

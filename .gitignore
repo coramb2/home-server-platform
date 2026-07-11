@@ -1,0 +1,56 @@
+# ─── Secrets: NEVER commit ───────────────────────────────────────────────
+.env
+.env.*
+!.env.example
+*.key
+*.pem
+vapid_private*.json
+vapid_private*
+restic-password*
+*secret*
+!*.example
+
+# ─── Network map / runtime data: NEVER commit (this maps the home) ───────
+# network-traffic-analyzer runtime state
+device_names.json
+known_devices.json
+security_alerts.json
+alert_state.json
+geoip_cache.json
+threat_intel_cache.json
+*.pcap
+reports/
+# real config that contains the actual ts.net hostname / IPs
+Caddyfile
+!caddy/Caddyfile.example
+compose.yaml
+compose.yml
+docker-compose.yaml
+docker-compose.yml
+!*.example
+
+# ─── App data & backups: NEVER commit ────────────────────────────────────
+pb_data/
+*.db
+*.sqlite
+*.sqlite3
+backups/
+*.tar.zst
+*.dump
+
+# ─── Build / deps ────────────────────────────────────────────────────────
+node_modules/
+.svelte-kit/
+build/
+dist/
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# ─── OS / editor cruft ───────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+*.swp
+.idea/
+.vscode/
