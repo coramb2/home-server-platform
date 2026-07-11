@@ -1,38 +1,87 @@
 # home-server-platform
 
-A self-hosted, modular home-server platform for a two-person household.
+> A self-hosted, modular home-server platform for a two-person household — chores,
+> planning, and network monitoring in one place, on hardware you own, reachable only
+> over your private network.
 
-Each capability — **ticketing**, **network monitoring**, and (later) **media** — is an
-independent, least-privilege service. They are unified behind **one frontend**, **one
-ingress** (Caddy), and **one private network edge** (Tailscale). **No ports are forwarded
-on the router, ever.** Remote access is exclusively over the Tailscale mesh.
+Most "household organizer" apps are someone else's cloud. This is the opposite: a small,
+secure platform you run at home, where each capability is an independent module unified behind
+a single app. It started as a shared ticket system for two people (think *"the dishwasher is
+making a grinding noise"* → a tracked ticket, not a lost text message) and grew into a base
+that other home-lab services plug into.
 
-Built as equal parts useful tool and learning project by two neurodivergent tech nerds.
+It's built as equal parts useful tool and learning project.
 
-## Documents
+## What it does
 
-- **[ARCHITECTURE.md](ARCHITECTURE.md)** — the platform model, stack, trust boundaries,
-  Caddy routing, auth, push, backups, and the public/private publishing rule.
-- **[ROADMAP.md](ROADMAP.md)** — how we work (sprints + checkpoints), success metrics,
-  and the sprint backlog.
+- **Tickets** — file, assign, comment on, and close household tasks from your phone in seconds.
+  Chores, repairs, errands, and bigger planning threads (*"plan Christmas"*) all live as
+  tickets with status, priority, categories, and due dates.
+- **Per-person time tracking** — see how long tasks actually take, framed as a friendly
+  scoreboard rather than a stopwatch.
+- **Network monitoring** — the home network's traffic analyzer lives here too, and can turn a
+  real security alert into a tracked ticket automatically.
+- **Notifications that find you** — push to your phone when something's assigned to you, so the
+  system replaces the group text instead of adding another inbox.
+- **Media (planned)** — a self-hosted movie/show/music library as a future module.
 
-## ⚠️ Before you commit anything
+## How it's built
 
-This repo is **public**. The code and architecture are meant to be shared; **anything that
-describes our actual home network is not.** Read the "Public vs. private" rule in
-[ARCHITECTURE.md](ARCHITECTURE.md#12-public-vs-private-what-goes-in-this-repo) before your
-first commit. Secrets and runtime data are blocked by [`.gitignore`](.gitignore) and a
-[gitleaks pre-commit hook](.pre-commit-config.yaml) — do not disable them.
+One frontend, one front door, one private network edge — with independent services behind it:
 
-## Status
+```
+  Your phones ── Tailscale (no ports forwarded, ever) ── Caddy ──┬── Tickets   (PocketBase)
+                                                                 ├── Network   (traffic analyzer)
+                                                                 └── Media     (Jellyfin, later)
+                          all wrapped by one installable app (SvelteKit PWA)
+```
 
-Pre–Sprint 0 (scaffolding). See [ROADMAP.md](ROADMAP.md).
+| Layer | Choice |
+|---|---|
+| Frontend | SvelteKit, installable to your phone's home screen (PWA) |
+| Tickets backend | PocketBase (SQLite, built-in auth) |
+| Network module | [network-traffic-analyzer](https://github.com/coramb2/network-traffic-analyzer) (Python/Flask) |
+| Ingress / TLS | Caddy |
+| Private access | Tailscale (WireGuard mesh) — the platform never touches the public internet |
+| Notifications | Web Push (encrypted, from your own server) |
+| Runtime | Docker Compose on Debian/Ubuntu |
 
-## Modules
+See **[ARCHITECTURE.md](ARCHITECTURE.md)** for the full design — trust boundaries, the module
+contract, auth model, and backup strategy.
 
-| Module | Path | Backend | Status |
-|---|---|---|---|
-| Shell (unified PWA) | `apps/shell` | SvelteKit | Planned (Sprint 1) |
-| Tickets | `modules/tickets` | PocketBase | Planned (Sprint 1) |
-| Network | `modules/network` | [network-traffic-analyzer](https://github.com/coramb2/network-traffic-analyzer) (Python/Flask) | Existing; integrate Sprint 5 |
-| Media | `modules/media` | Jellyfin | Future |
+## Design principles
+
+- **Self-hosted; you own the data.** No third-party SaaS for core function.
+- **Zero WAN exposure.** No router ports opened — remote access is Tailscale-only.
+- **Own the fun part, deploy the scary part.** Build the interface; use maintained, audited
+  software for auth and storage.
+- **Adoption-first.** For a two-person tool, it only works if *both* people reach for it
+  instead of texting. Every decision is judged against that friction.
+- **A tested backup, or it isn't a backup.**
+
+## Status & roadmap
+
+Early development. Work is organized as small sprints, each ending in something that runs and is
+demoable. See **[ROADMAP.md](ROADMAP.md)** for the sprint backlog and the 30-day adoption
+checkpoint, and **[docs/sprint-0.md](docs/sprint-0.md)** for the server foundation runbook.
+
+## Repository layout
+
+```
+apps/shell/        SvelteKit PWA — the unified frontend
+modules/tickets/   PocketBase schema + config
+modules/network/   the traffic analyzer (imported)
+caddy/             reverse-proxy config
+docs/              runbooks and design notes
+```
+
+## Contributing & security
+
+This repo is public, but anything describing a real home network is not. If you're forking or
+contributing, read **[CONTRIBUTING.md](CONTRIBUTING.md)** first — it covers repo conventions and
+the rule for what must never be committed (secrets, network maps), enforced by a gitleaks
+pre-commit hook.
+
+## License
+
+To be decided (likely MIT). Until then, all rights reserved by the author.
