@@ -1,0 +1,16 @@
+{
+	"name": "houseos-push",
+	"version": "0.1.0",
+	"private": true,
+	"type": "module",
+	"description": "Web Push sender: watches PocketBase and delivers notifications on assignment/comment.",
+	"main": "index.js",
+	"scripts": {
+		"start": "node index.js"
+	},
+	"dependencies": {
+		"dotenv": "^16.4.7",
+		"pocketbase": "^0.26.2",
+		"web-push": "^3.6.7"
+	}
+}
