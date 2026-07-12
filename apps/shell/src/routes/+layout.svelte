@@ -12,7 +12,8 @@
 	let pushBusy = $state(false);
 
 	const tabs = [
-		{ href: '/', label: 'Tickets', icon: 'ticket' },
+		{ href: '/', label: 'Dashboard', icon: 'home' },
+		{ href: '/tickets', label: 'Tickets', icon: 'ticket' },
 		{ href: '/network', label: 'Network', icon: 'activity' },
 		{ href: '/media', label: 'Media', icon: 'media' }
 	];
