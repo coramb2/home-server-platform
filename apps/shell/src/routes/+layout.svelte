@@ -3,13 +3,14 @@
 	import { page } from '$app/state';
 	import { goto } from '$app/navigation';
 	import { auth, logout } from '$lib/auth.svelte';
+	import Icon from '$lib/Icon.svelte';
 
 	let { children } = $props();
 
 	const tabs = [
-		{ href: '/', label: 'Tickets', icon: '🎫' },
-		{ href: '/network', label: 'Network', icon: '📡' },
-		{ href: '/media', label: 'Media', icon: '🎬' }
+		{ href: '/', label: 'Tickets', icon: 'ticket' },
+		{ href: '/network', label: 'Network', icon: 'activity' },
+		{ href: '/media', label: 'Media', icon: 'media' }
 	];
 
 	// Auth guard: bounce to /login when signed out (except on the login page).
@@ -22,6 +23,10 @@
 	function isActive(href: string) {
 		return href === '/' ? page.url.pathname === '/' : page.url.pathname.startsWith(href);
 	}
+
+	function initials(u: { name?: string; email?: string }) {
+		return (u.name || u.email || '?').slice(0, 2).toUpperCase();
+	}
 </script>
 
 {#if page.url.pathname === '/login'}
@@ -29,21 +34,34 @@
 {:else if auth.user}
 	<div class="app">
 		<header class="topbar">
-			<div class="brand">
-				<span class="logo">🏠</span>
-				<span class="name">HouseOS</span>
-			</div>
+			<a class="brand" href="/">
+				<svg class="logo" width="26" height="26" viewBox="0 0 512 512" aria-hidden="true">
+					<defs>
+						<linearGradient id="hg" x1="0" y1="0" x2="1" y2="1">
+							<stop offset="0" stop-color="#8b5cf6" />
+							<stop offset="1" stop-color="#ec4899" />
+						</linearGradient>
+					</defs>
+					<rect width="512" height="512" rx="120" fill="rgba(20,20,44,0.9)" />
+					<path d="M256 108 132 214v190h84V300h80v104h84V214z" fill="url(#hg)" />
+					<circle cx="256" cy="250" r="30" fill="#0b0f1e" />
+				</svg>
+				<span class="name">House<span class="grad-text">OS</span></span>
+			</a>
 			<nav class="tabs">
 				{#each tabs as tab (tab.href)}
 					<a href={tab.href} class="tab" class:active={isActive(tab.href)}>
-						<span class="tab-icon">{tab.icon}</span>
+						<Icon name={tab.icon} size={17} />
 						<span class="tab-label">{tab.label}</span>
 					</a>
 				{/each}
 			</nav>
 			<div class="user">
-				<span class="who" title={auth.user.email}>{auth.user.name || auth.user.email}</span>
-				<button class="btn logout" onclick={logout}>Sign out</button>
+				<span class="avatar" title={auth.user.email}>{initials(auth.user)}</span>
+				<span class="who">{auth.user.name || auth.user.email}</span>
+				<button class="btn icon-btn" onclick={logout} aria-label="Sign out" title="Sign out">
+					<Icon name="logout" size={17} />
+				</button>
 			</div>
 		</header>
 		<main class="content">
@@ -65,54 +83,67 @@
 		display: flex;
 		align-items: center;
 		gap: 1rem;
-		padding: 0.6rem max(1rem, env(safe-area-inset-left)) 0.6rem max(1rem, env(safe-area-inset-left));
+		padding: 0.6rem max(1rem, env(safe-area-inset-left));
 		padding-top: max(0.6rem, env(safe-area-inset-top));
-		background: rgba(15, 17, 23, 0.85);
-		backdrop-filter: blur(12px);
-		border-bottom: 1px solid var(--border);
+		background: rgba(9, 11, 22, 0.72);
+		backdrop-filter: blur(16px);
+		border-bottom: 1px solid var(--line);
 	}
 	.brand {
 		display: flex;
 		align-items: center;
 		gap: 0.5rem;
-		font-weight: 700;
-		letter-spacing: 0.2px;
-	}
-	.logo {
-		font-size: 1.25rem;
+		font-weight: 600;
+		color: var(--ink);
 	}
 	.name {
-		font-size: 1.05rem;
+		font-size: 1.1rem;
+		letter-spacing: 0.2px;
 	}
 	.tabs {
 		display: flex;
-		gap: 0.25rem;
+		gap: 0.35rem;
 		margin: 0 auto;
 	}
 	.tab {
 		display: flex;
 		align-items: center;
-		gap: 0.4rem;
-		padding: 0.45rem 0.85rem;
+		gap: 0.45rem;
+		padding: 0.45rem 0.9rem;
 		border-radius: 999px;
 		color: var(--muted);
-		font-weight: 600;
+		font-weight: 500;
+		border: 1px solid transparent;
 		transition:
 			background 0.15s ease,
-			color 0.15s ease;
+			color 0.15s ease,
+			border-color 0.15s ease;
 	}
 	.tab:hover {
-		color: var(--text);
-		background: var(--surface-2);
+		color: var(--ink);
+		background: rgba(167, 139, 250, 0.08);
 	}
 	.tab.active {
-		color: var(--text);
-		background: var(--surface-3);
+		color: var(--ink);
+		background: var(--grad-soft);
+		border-color: var(--line-strong);
+		box-shadow: 0 0 18px rgba(139, 92, 246, 0.22);
 	}
 	.user {
 		display: flex;
 		align-items: center;
 		gap: 0.6rem;
+	}
+	.avatar {
+		width: 30px;
+		height: 30px;
+		border-radius: 50%;
+		display: grid;
+		place-items: center;
+		font-size: 0.72rem;
+		font-weight: 600;
+		color: #fff;
+		background: var(--grad);
 	}
 	.who {
 		color: var(--muted);
@@ -122,26 +153,20 @@
 		text-overflow: ellipsis;
 		white-space: nowrap;
 	}
-	.logout {
-		padding: 0.4rem 0.75rem;
-		font-size: 0.85rem;
+	.icon-btn {
+		padding: 0.4rem;
 	}
 	.content {
 		flex: 1;
 		width: 100%;
-		max-width: 1200px;
+		max-width: 1240px;
 		margin: 0 auto;
-		padding: 1rem max(1rem, env(safe-area-inset-left)) 2rem;
+		padding: 1.25rem max(1rem, env(safe-area-inset-left)) 2.5rem;
 	}
 
 	@media (max-width: 640px) {
-		.tab-label {
-			display: none;
-		}
+		.tab-label,
 		.who {
-			display: none;
-		}
-		.name {
 			display: none;
 		}
 		.tabs {

@@ -1,27 +1,30 @@
 <script lang="ts">
+	import Icon from '$lib/Icon.svelte';
 	// Placeholder — a future Jellyfin module (movies/shows/music) as its own tab.
 </script>
 
-<div class="placeholder">
-	<h1>🎬 Media</h1>
-	<p>A self-hosted movie, show, and music library (Jellyfin) will plug in here as its own module.</p>
-	<p class="tag">Future</p>
+<div class="media panel">
+	<h1><Icon name="media" size={22} /> Media</h1>
+	<p>A self-hosted movie, show, and music library (Jellyfin) will plug in here as its own module — same platform, same door, its own tab.</p>
+	<span class="badge">Future</span>
 </div>
 
 <style>
-	.placeholder {
-		max-width: 560px;
+	.media {
+		max-width: 620px;
 		margin: 2rem auto;
-		background: var(--surface);
-		border: 1px solid var(--border);
-		border-radius: var(--radius);
-		padding: 1.75rem;
+		padding: 1.9rem;
+		box-shadow: var(--glow-violet);
 	}
 	h1 {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
 		margin-top: 0;
+		font-size: 1.4rem;
 	}
-	.tag {
-		color: var(--accent);
-		font-weight: 600;
+	p {
+		color: var(--muted);
+		line-height: 1.7;
 	}
 </style>
