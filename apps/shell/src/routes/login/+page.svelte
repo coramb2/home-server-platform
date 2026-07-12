@@ -24,8 +24,21 @@
 </script>
 
 <div class="wrap">
-	<form class="card" onsubmit={submit}>
-		<div class="brand"><span class="logo">🏠</span> HouseOS</div>
+	<form class="card panel" onsubmit={submit}>
+		<div class="brand">
+			<svg width="34" height="34" viewBox="0 0 512 512" aria-hidden="true">
+				<defs>
+					<linearGradient id="lg" x1="0" y1="0" x2="1" y2="1">
+						<stop offset="0" stop-color="#8b5cf6" />
+						<stop offset="1" stop-color="#ec4899" />
+					</linearGradient>
+				</defs>
+				<rect width="512" height="512" rx="120" fill="rgba(20,20,44,0.9)" />
+				<path d="M256 108 132 214v190h84V300h80v104h84V214z" fill="url(#lg)" />
+				<circle cx="256" cy="250" r="30" fill="#0b0f1e" />
+			</svg>
+			<span>House<span class="grad-text">OS</span></span>
+		</div>
 		<p class="sub">Household platform · sign in</p>
 		<input class="field" type="email" placeholder="Email" bind:value={email} autocomplete="username" required />
 		<input
@@ -50,22 +63,19 @@
 	}
 	.card {
 		width: 100%;
-		max-width: 360px;
+		max-width: 370px;
 		display: flex;
 		flex-direction: column;
 		gap: 0.75rem;
-		background: var(--surface);
-		border: 1px solid var(--border);
-		border-radius: var(--radius);
-		padding: 1.75rem;
-		box-shadow: var(--shadow);
+		padding: 2rem;
+		box-shadow: var(--glow-violet);
 	}
 	.brand {
-		font-size: 1.4rem;
-		font-weight: 700;
+		font-size: 1.55rem;
+		font-weight: 600;
 		display: flex;
 		align-items: center;
-		gap: 0.5rem;
+		gap: 0.6rem;
 	}
 	.sub {
 		margin: 0 0 0.5rem;
@@ -74,10 +84,10 @@
 	}
 	.submit {
 		margin-top: 0.25rem;
-		padding: 0.7rem;
+		padding: 0.75rem;
 	}
 	.error {
-		color: var(--p1);
+		color: var(--red);
 		font-size: 0.9rem;
 		margin: 0;
 	}
