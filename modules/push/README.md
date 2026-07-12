@@ -3,9 +3,11 @@
 Delivers **Web Push** notifications to phones on ticket assignment and new comments.
 
 Web Push can't be sent from the static frontend (it needs the VAPID private key), so this is
-a tiny server-side worker: it authenticates to PocketBase, subscribes to `tickets` and
-`comments` realtime, and pushes to the assignee's registered devices via the Web Push
-protocol. Dead subscriptions (HTTP 404/410) are pruned automatically.
+a tiny server-side worker: it authenticates to PocketBase, **polls** `tickets` and `comments`
+every few seconds, and pushes to the assignee's registered devices via the Web Push protocol
+on new assignments and comments. Dead subscriptions (HTTP 404/410) are pruned automatically.
+(Polling rather than realtime SSE — it's bulletproof under Node, and a few-second latency is
+fine for a household.)
 
 ## Why Web Push (not ntfy)
 
