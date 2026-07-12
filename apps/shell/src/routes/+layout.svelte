@@ -4,14 +4,42 @@
 	import { goto } from '$app/navigation';
 	import { auth, logout } from '$lib/auth.svelte';
 	import Icon from '$lib/Icon.svelte';
+	import { enablePush, currentStatus, isSupported, type PushStatus } from '$lib/push';
 
 	let { children } = $props();
+
+	let pushStatus = $state<PushStatus>('default');
+	let pushBusy = $state(false);
 
 	const tabs = [
 		{ href: '/', label: 'Tickets', icon: 'ticket' },
 		{ href: '/network', label: 'Network', icon: 'activity' },
 		{ href: '/media', label: 'Media', icon: 'media' }
 	];
+
+	$effect(() => {
+		if (auth.user && isSupported()) currentStatus().then((s) => (pushStatus = s));
+	});
+
+	async function toggleAlerts() {
+		if (!auth.user || pushBusy || pushStatus === 'subscribed') return;
+		pushBusy = true;
+		try {
+			pushStatus = await enablePush(auth.user.id);
+		} finally {
+			pushBusy = false;
+		}
+	}
+
+	const alertLabel = $derived(
+		{
+			subscribed: 'Alerts on',
+			denied: 'Alerts blocked',
+			unsupported: 'Alerts unavailable',
+			error: 'Enable alerts',
+			default: 'Enable alerts'
+		}[pushStatus]
+	);
 
 	// Auth guard: bounce to /login when signed out (except on the login page).
 	$effect(() => {
@@ -57,6 +85,18 @@
 				{/each}
 			</nav>
 			<div class="user">
+				{#if isSupported()}
+					<button
+						class="btn icon-btn alerts"
+						class:on={pushStatus === 'subscribed'}
+						onclick={toggleAlerts}
+						disabled={pushBusy || pushStatus === 'subscribed' || pushStatus === 'denied'}
+						aria-label={alertLabel}
+						title={alertLabel}
+					>
+						<Icon name="bell" size={17} />
+					</button>
+				{/if}
 				<span class="avatar" title={auth.user.email}>{initials(auth.user)}</span>
 				<span class="who">{auth.user.name || auth.user.email}</span>
 				<button class="btn icon-btn" onclick={logout} aria-label="Sign out" title="Sign out">
@@ -155,6 +195,15 @@
 	}
 	.icon-btn {
 		padding: 0.4rem;
+	}
+	.alerts.on {
+		color: var(--violet);
+		border-color: var(--line-strong);
+		box-shadow: 0 0 14px rgba(139, 92, 246, 0.35);
+	}
+	.alerts:disabled {
+		opacity: 0.85;
+		cursor: default;
 	}
 	.content {
 		flex: 1;

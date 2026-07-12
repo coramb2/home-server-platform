@@ -36,6 +36,21 @@ services:
     # No published ports: reachable only inside the platform network, via Caddy.
     networks: [platform]
 
+  push:
+    build:
+      context: ./modules/push
+    restart: unless-stopped
+    environment:
+      - PB_URL=http://pocketbase:8090
+      - PB_ADMIN_EMAIL=${PB_ADMIN_EMAIL}
+      - PB_ADMIN_PASSWORD=${PB_ADMIN_PASSWORD}
+      - VAPID_PUBLIC_KEY=${VAPID_PUBLIC_KEY}
+      - VAPID_PRIVATE_KEY=${VAPID_PRIVATE_KEY}
+      - VAPID_SUBJECT=${VAPID_SUBJECT}
+    depends_on:
+      - pocketbase
+    networks: [platform]
+
   # ── Network module (traffic analyzer) attaches here at server time. ──
   # It ships its own compose in modules/network; route /api/network/* to its
   # dashboard service. Keep it isolated — it holds CAP_NET_RAW. See ARCHITECTURE §9.
