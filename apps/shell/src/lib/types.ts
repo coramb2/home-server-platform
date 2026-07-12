@@ -37,6 +37,17 @@ export interface Ticket {
 	updated: string;
 	expand?: {
 		assignee?: UserRec;
+		created_by?: UserRec;
 		done_by?: UserRec;
 	};
+}
+
+export interface Comment {
+	id: string;
+	ticket: string;
+	author: string;
+	body: string;
+	created: string;
+	updated: string;
+	expand?: { author?: UserRec };
 }
