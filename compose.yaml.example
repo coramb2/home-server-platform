@@ -65,6 +65,22 @@ services:
       # For host disk/sensors, also mount host paths read-only, e.g. - /:/host:ro
     networks: [platform]
 
+  alert-bridge:
+    # Files curated, deduped security tickets from the analyzer's alerts.
+    build:
+      context: ./modules/alert-bridge
+    restart: unless-stopped
+    environment:
+      - PB_URL=http://pocketbase:8090
+      - PB_ADMIN_EMAIL=${PB_ADMIN_EMAIL}
+      - PB_ADMIN_PASSWORD=${PB_ADMIN_PASSWORD}
+      - ANALYZER_URL=${ANALYZER_URL:-http://analyzer-dashboard:8080}
+      - ANALYZER_PASSWORD=${DASHBOARD_PASSWORD}
+      - SECURITY_ASSIGNEE=${SECURITY_ASSIGNEE:-}
+    depends_on:
+      - pocketbase
+    networks: [platform]
+
   # ── Network module (traffic analyzer) attaches here at server time. ──
   # It ships its own compose in modules/network; route /api/network/* to its
   # dashboard service. Keep it isolated — it holds CAP_NET_RAW. See ARCHITECTURE §9.
