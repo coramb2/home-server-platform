@@ -51,6 +51,20 @@ services:
       - pocketbase
     networks: [platform]
 
+  metrics:
+    # Glances agent — exposes host CPU/RAM/disk/temp/uptime over REST at /api/4/*.
+    # Pin GLANCES_TAG to a specific release in .env (project rule: no :latest).
+    image: nicolargo/glances:${GLANCES_TAG:-latest-full}
+    restart: unless-stopped
+    pid: host
+    environment:
+      - GLANCES_OPT=-w --disable-webui
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - /etc/os-release:/etc/os-release:ro
+      # For host disk/sensors, also mount host paths read-only, e.g. - /:/host:ro
+    networks: [platform]
+
   # ── Network module (traffic analyzer) attaches here at server time. ──
   # It ships its own compose in modules/network; route /api/network/* to its
   # dashboard service. Keep it isolated — it holds CAP_NET_RAW. See ARCHITECTURE §9.

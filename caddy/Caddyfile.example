@@ -18,6 +18,11 @@
 		reverse_proxy analyzer-dashboard:8080
 	}
 
+	# Host metrics (Glances REST API -> /api/4/*)
+	handle_path /api/metrics/* {
+		reverse_proxy metrics:61208
+	}
+
 	# Media module (future)
 	# handle_path /api/media/* {
 	# 	reverse_proxy jellyfin:8096
