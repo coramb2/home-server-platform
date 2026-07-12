@@ -1,0 +1,56 @@
+# Pilot stack — run the platform on any always-on Docker host, fronted by
+# `tailscale serve` for HTTPS. Core modules only (Caddy + PocketBase + push);
+# Network/Media/host-metrics tabs degrade gracefully until their agents exist.
+#
+#   docker compose -f compose.pilot.yaml up -d --build
+#
+# Committed on purpose (no secrets — values come from .env). See
+# docs/pilot-quickstart.md.
+name: houseos-pilot
+
+services:
+  caddy:
+    image: caddy:2.8-alpine
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8080:8080" # localhost only; tailscale serve exposes it over HTTPS
+    volumes:
+      - ./caddy/Caddyfile.pilot:/etc/caddy/Caddyfile:ro
+      - ./apps/shell/build:/srv/shell:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on: [pocketbase]
+    networks: [platform]
+
+  pocketbase:
+    build:
+      context: ./modules/tickets
+      args:
+        PB_VERSION: "0.39.6"
+    restart: unless-stopped
+    volumes:
+      - pb_data:/pb/pb_data
+    networks: [platform]
+
+  push:
+    build:
+      context: ./modules/push
+    restart: unless-stopped
+    environment:
+      - PB_URL=http://pocketbase:8090
+      - PB_ADMIN_EMAIL=${PB_ADMIN_EMAIL}
+      - PB_ADMIN_PASSWORD=${PB_ADMIN_PASSWORD}
+      - VAPID_PUBLIC_KEY=${VAPID_PUBLIC_KEY}
+      - VAPID_PRIVATE_KEY=${VAPID_PRIVATE_KEY}
+      - VAPID_SUBJECT=${VAPID_SUBJECT}
+    depends_on: [pocketbase]
+    networks: [platform]
+
+volumes:
+  caddy_data:
+  caddy_config:
+  pb_data:
+
+networks:
+  platform:
+    driver: bridge

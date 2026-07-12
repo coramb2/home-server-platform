@@ -1,0 +1,19 @@
+# Pilot Caddyfile — plain HTTP on :8080. Tailscale serve provides HTTPS on the
+# ts.net name in front, so Caddy does no TLS here. For the real server, use
+# caddy/Caddyfile with the Tailscale cert instead.
+:8080 {
+	encode gzip
+
+	handle_path /api/tickets/* {
+		reverse_proxy pocketbase:8090
+	}
+
+	# SvelteKit shell (static build) — SPA fallback.
+	# Network/Media/metrics tabs call their own /api/* paths; with no agent wired
+	# they simply 404 here and the tab shows its graceful "not connected" state.
+	handle {
+		root * /srv/shell
+		try_files {path} /index.html
+		file_server
+	}
+}
