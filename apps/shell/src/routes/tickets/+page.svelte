@@ -159,7 +159,7 @@
 						<article class="card" class:done={t.status === 'Done'}>
 							<div class="card-top">
 								{#if t.priority}<span class="pri pri-{t.priority}">{t.priority}</span>{/if}
-								<span class="ct-title">{t.title}</span>
+								<a class="ct-title" href="/tickets/{t.id}">{t.title}</a>
 							</div>
 							<div class="meta">
 								{#if t.category}<span class="chip">{t.category}</span>{/if}
@@ -321,6 +321,10 @@
 	.ct-title {
 		font-weight: 500;
 		line-height: 1.3;
+		color: var(--ink);
+	}
+	.ct-title:hover {
+		color: var(--violet);
 	}
 	.card.done .ct-title {
 		text-decoration: line-through;
