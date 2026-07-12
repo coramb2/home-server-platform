@@ -3,10 +3,12 @@
 	import { auth } from '$lib/auth.svelte';
 	import { type Ticket } from '$lib/types';
 	import Icon from '$lib/Icon.svelte';
+	import { fetchMetrics, fmtGiB, type HostMetrics } from '$lib/metrics';
 
 	let tickets = $state<Ticket[]>([]);
 	let health = $state<'checking' | 'online' | 'offline'>('checking');
 	let loading = $state(true);
+	let metrics = $state<HostMetrics | null>(null);
 
 	async function load() {
 		try {
@@ -37,6 +39,21 @@
 		return () => {
 			clearTimeout(t);
 			cancel?.();
+		};
+	});
+
+	// Poll host metrics (Glances) every 5s; null = agent not reachable.
+	$effect(() => {
+		let alive = true;
+		const tick = async () => {
+			const m = await fetchMetrics();
+			if (alive) metrics = m;
+		};
+		tick();
+		const id = setInterval(tick, 5000);
+		return () => {
+			alive = false;
+			clearInterval(id);
 		};
 	});
 
@@ -118,7 +135,12 @@
 		{ name: 'Notifications', icon: 'bell', status: 'Ready', tone: 'idle' },
 		{ name: 'Network', icon: 'activity', status: 'Planned', tone: 'plan' },
 		{ name: 'Media', icon: 'media', status: 'Planned', tone: 'plan' },
-		{ name: 'Host metrics', icon: 'server', status: 'Connect agent', tone: 'plan' }
+		{
+			name: 'Host metrics',
+			icon: 'server',
+			status: metrics ? 'Online' : 'Connect agent',
+			tone: metrics ? 'ok' : 'plan'
+		}
 	]);
 
 	const statusColor: Record<string, string> = {
@@ -131,6 +153,20 @@
 	const who = (u?: { name?: string; email?: string }) =>
 		u?.name || u?.email?.split('@')[0] || '—';
 </script>
+
+<div class="sysbar panel" class:dim={!metrics}>
+	<span class="sb-lead"><Icon name="server" size={16} /></span>
+	{#if metrics}
+		<div class="sb"><b>{Math.round(metrics.cpu ?? 0)}%</b><span>cpu</span></div>
+		<div class="sb"><b>{metrics.memPct != null ? Math.round(metrics.memPct) : '—'}%</b><span>ram</span></div>
+		<div class="sb"><b>{fmtGiB(metrics.memUsed)}</b><span>used</span></div>
+		<div class="sb"><b>{metrics.diskFreeGb != null ? metrics.diskFreeGb.toFixed(0) + ' GiB' : '—'}</b><span>disk free</span></div>
+		<div class="sb"><b>{metrics.tempC != null ? metrics.tempC + '°C' : '—'}</b><span>temp</span></div>
+		<div class="sb"><b>{metrics.uptime ?? '—'}</b><span>uptime</span></div>
+	{:else}
+		<span class="sb-note">Host metrics agent not connected — deploy Glances to light this up.</span>
+	{/if}
+</div>
 
 <div class="head">
 	<div>
@@ -224,6 +260,40 @@
 </div>
 
 <style>
+	.sysbar {
+		display: flex;
+		align-items: center;
+		gap: 1.5rem;
+		flex-wrap: wrap;
+		padding: 0.7rem 1.15rem;
+		margin-bottom: 1rem;
+	}
+	.sb-lead {
+		display: inline-flex;
+		color: var(--violet);
+	}
+	.sb {
+		display: flex;
+		align-items: baseline;
+		gap: 0.4rem;
+	}
+	.sb b {
+		font-weight: 600;
+		color: var(--ink);
+	}
+	.sb span {
+		font-size: 0.68rem;
+		text-transform: uppercase;
+		letter-spacing: 0.5px;
+		color: var(--muted);
+	}
+	.sysbar.dim .sb-lead {
+		color: var(--faint);
+	}
+	.sb-note {
+		font-size: 0.85rem;
+		color: var(--muted);
+	}
 	.head {
 		display: flex;
 		align-items: flex-end;
