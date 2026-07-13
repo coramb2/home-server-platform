@@ -1,18 +1,34 @@
 <script lang="ts">
 	import Icon from '$lib/Icon.svelte';
+	import { pb } from '$lib/pb';
 	import { fetchNetwork, type NetOverview } from '$lib/network';
+	import type { Ticket } from '$lib/types';
 
 	let net = $state<NetOverview | null>(null);
 	let loaded = $state(false);
+	let secTickets = $state<Ticket[]>([]);
 
 	$effect(() => {
 		let alive = true;
+		const loadSec = async () => {
+			try {
+				const t = await pb.collection('tickets').getFullList<Ticket>({
+					filter: pb.filter('category = {:c} && status != {:s}', { c: 'security', s: 'Done' }),
+					sort: '-created',
+					expand: 'assignee'
+				});
+				if (alive) secTickets = t;
+			} catch {
+				/* not signed in / offline — leave as is */
+			}
+		};
 		const tick = async () => {
 			const n = await fetchNetwork();
 			if (alive) {
 				net = n;
 				loaded = true;
 			}
+			loadSec();
 		};
 		tick();
 		const id = setInterval(tick, 5000);
@@ -133,9 +149,30 @@
 		</div>
 
 		<p class="note">
-			Coming next: curated security alerts auto-file as <code>security</code> tickets (deduped, no spam).
+			Curated security alerts from the analyzer auto-file as <code>security</code> tickets — listed
+			below (deduped, no notification spam).
 		</p>
 	{/if}
+
+	<section class="panel secpanel">
+		<div class="panel-head">
+			<span><Icon name="ticket" size={15} /> Security tickets</span>
+			<span class="seccount">{secTickets.length}</span>
+		</div>
+		{#if secTickets.length === 0}
+			<p class="empty">No open security alerts.</p>
+		{:else}
+			<div class="sec-list">
+				{#each secTickets as t (t.id)}
+					<a class="sec-row" href="/tickets/{t.id}">
+						{#if t.priority}<span class="pri pri-{t.priority}">{t.priority}</span>{/if}
+						<span class="sec-title">{t.title}</span>
+						<span class="sec-status">{t.status}</span>
+					</a>
+				{/each}
+			</div>
+		{/if}
+	</section>
 </div>
 
 <style>
@@ -310,6 +347,65 @@
 		color: var(--violet);
 		padding: 0.05rem 0.4rem;
 		border-radius: 5px;
+	}
+	.secpanel {
+		padding: 1rem 1.15rem;
+		margin-top: 1.1rem;
+	}
+	.seccount {
+		background: rgba(251, 113, 133, 0.16);
+		color: var(--red);
+		border-radius: 999px;
+		padding: 0 0.5rem;
+		font-size: 0.75rem;
+	}
+	.sec-list {
+		display: flex;
+		flex-direction: column;
+		gap: 0.5rem;
+	}
+	.sec-row {
+		display: flex;
+		align-items: center;
+		gap: 0.6rem;
+		padding: 0.55rem 0.65rem;
+		border: 1px solid var(--line);
+		border-radius: 9px;
+		color: var(--ink);
+		background: var(--panel-2);
+	}
+	.sec-row:hover {
+		border-color: var(--line-strong);
+	}
+	.pri {
+		flex: none;
+		font-size: 0.66rem;
+		font-weight: 700;
+		padding: 0.1rem 0.36rem;
+		border-radius: 5px;
+		color: #0b0f1e;
+	}
+	.pri-P1 {
+		background: var(--red);
+	}
+	.pri-P2 {
+		background: var(--amber);
+	}
+	.pri-P3 {
+		background: var(--violet);
+	}
+	.pri-P4 {
+		background: var(--teal);
+	}
+	.sec-title {
+		flex: 1;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+	.sec-status {
+		color: var(--muted);
+		font-size: 0.78rem;
 	}
 	@media (max-width: 720px) {
 		.tiles {
