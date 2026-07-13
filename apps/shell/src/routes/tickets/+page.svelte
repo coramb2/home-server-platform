@@ -56,15 +56,19 @@
 		return `${Math.round(h / 24)}d`;
 	}
 
+	// Security-category tickets (auto-filed by the alert bridge) live on the
+	// Network tab, not the household chore board.
+	const visible = $derived(tickets.filter((t) => t.category !== 'security'));
+
 	const stats = $derived.by(() => {
-		const done = tickets.filter((t) => t.status === 'Done' && t.done_at);
+		const done = visible.filter((t) => t.status === 'Done' && t.done_at);
 		const durs = done
 			.map((t) => new Date(t.done_at as string).getTime() - new Date(t.created).getTime())
 			.filter((ms) => ms >= 0);
 		const avg = durs.length ? durs.reduce((a, b) => a + b, 0) / durs.length : 0;
 		return {
-			open: tickets.filter((t) => t.status === 'Open').length,
-			prog: tickets.filter((t) => t.status === 'In Progress').length,
+			open: visible.filter((t) => t.status === 'Open').length,
+			prog: visible.filter((t) => t.status === 'In Progress').length,
 			done: done.length,
 			avg: durs.length ? fmt(avg) : '—'
 		};
@@ -104,7 +108,7 @@
 		}
 	}
 
-	const byStatus = (s: Status) => tickets.filter((t) => t.status === s);
+	const byStatus = (s: Status) => visible.filter((t) => t.status === s);
 	const who = (u?: { name?: string; email?: string }) =>
 		u?.name || u?.email?.split('@')[0] || '—';
 	const duration = (from: string, to: string) =>
