@@ -51,3 +51,17 @@ export interface Comment {
 	updated: string;
 	expand?: { author?: UserRec };
 }
+
+export interface RecurringTask {
+	id: string;
+	title: string;
+	description?: string;
+	category?: string;
+	priority?: Priority | '';
+	assignee?: string;
+	interval_days: number;
+	next_due: string;
+	active: boolean;
+	last_created?: string;
+	expand?: { assignee?: UserRec };
+}

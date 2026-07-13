@@ -114,7 +114,7 @@
 <div class="head">
 	<div class="title">
 		<h1>Household board</h1>
-		<p class="sub">Two people, one source of truth.</p>
+		<p class="sub">Two people, one source of truth. · <a href="/tickets/recurring">Recurring tasks</a></p>
 	</div>
 	<form class="quick" onsubmit={quickAdd}>
 		<input
