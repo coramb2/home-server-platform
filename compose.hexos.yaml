@@ -1,0 +1,22 @@
+# compose.hexos.yaml - HouseOS / TrueNAS 25.10
+
+services:
+  # One "service" = one running piece of the app (one container).
+  pocketbase:
+    # Build it from the recipe (Dockerfile)
+    build:
+      context: ./modules/tickets
+      args:
+        PB_VERSION: "0.39.6"
+
+    restart: unless-stopped
+
+    # TEMPORARY door: Lets you reach it from home computer's port
+    # 8090 for a first look. Deleted in step 5
+    ports:
+     - "8090:8090"
+
+    # where data lives. Left = folder on pool.
+    # right = where app thinks its saving
+    volumes:
+      - /mnt/SSDs/houseos/data/pb_data:/pb/pb_data
