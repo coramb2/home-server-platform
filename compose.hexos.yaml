@@ -11,10 +11,10 @@ services:
 
     restart: unless-stopped
 
-    # TEMPORARY door: Lets you reach it from home computer's port
-    # 8090 for a first look. Deleted in step 5
+    # TEMPORARY door: Opens port 8090 on server so home computers
+    # can take a first look. Deleted in step 5
     ports:
-     - "8090:8090"
+      - "8090:8090"
 
     # where data lives. Left = folder on pool.
     # right = where app thinks its saving
