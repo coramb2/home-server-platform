@@ -1,0 +1,6 @@
+# Never send these files to Docker build
+.git
+**/node_modules
+**/build
+**/.svelte-kit
+**/.env
