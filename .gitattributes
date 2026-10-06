@@ -1,0 +1,3 @@
+# Store all text files with Linux line endings (LF), no matter which
+# editor or operating system wrote them. The server runs Linux.
+* text=auto eol=lf
