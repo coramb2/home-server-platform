@@ -20,3 +20,19 @@ services:
     # right = where app thinks its saving
     volumes:
       - /mnt/SSDs/houseos/data/pb_data:/pb/pb_data
+
+  # The frontend: serves the app screens, forwards /api/tickets to PocketBase
+  caddy:
+    build:
+      context: .
+      dockerfile: caddy/Dockerfile
+    restart: unless-stopped
+
+    # TEMPORARY door: Opens port 80 on server so home computers
+    # can take a first look. Deleted in step 5
+    ports:
+      - "8088:8080"
+
+    # Start Pocketbase first.
+    depends_on:
+      - pocketbase
