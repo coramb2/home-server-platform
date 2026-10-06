@@ -28,7 +28,7 @@ services:
       dockerfile: caddy/Dockerfile
     restart: unless-stopped
 
-    # TEMPORARY door: Opens port 80 on server so home computers
+    # TEMPORARY door: Opens port 8088 on server so home computers
     # can take a first look. Deleted in step 5
     ports:
       - "8088:8080"
