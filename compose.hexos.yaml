@@ -17,6 +17,9 @@ services:
     build:
       context: .
       dockerfile: caddy/Dockerfile
+      args:
+        # Public push key (safe to commit)
+        VITE_VAPID_PUBLIC_KEY: "BD7ReKq95VBU31okT2Gecs_m8WX6wvat1zjxgVnPf4R8Bvn1Xy3ChKSCkaZlKirTlwGIS9OUSyXXOvbym7SBor8"
     restart: unless-stopped
     # Live inside the Tailscale container's network. Caddy can only be
     # reached through the tunnel. (The temporary 8088 door is gone.)
@@ -40,3 +43,16 @@ services:
     volumes:
       - /mnt/SSDs/houseos/data/tailscale:/var/lib/tailscale
       - ./tailscale/serve.json:/config/serve.json:ro
+
+  # Notification push service: sends push notifications to the app.
+  push:
+    build:
+      context: ./modules/push
+    restart: unless-stopped
+    # Has its own secrets file. The tunnel never sees these & this service never sees tunnel's key.
+    env_file:
+      - /mnt/SSDs/houseos/push.env
+    environment:
+      PB_URL: http://pocketbase:8090
+    depends_on:
+      - pocketbase
