@@ -1,38 +1,42 @@
-# compose.hexos.yaml - HouseOS / TrueNAS 25.10
+# compose.hexos.yaml - HouseOS on HexOS / TrueNAS 25.10
+# Database (PocketBase) + front door (Caddy) + private tunnel (Tailscale).
+# No ports are opened on the server: Tailscale is the only way in.
 
 services:
-  # One "service" = one running piece of the app (one container).
   pocketbase:
-    # Build it from the recipe (Dockerfile)
     build:
       context: ./modules/tickets
       args:
         PB_VERSION: "0.39.6"
-
     restart: unless-stopped
-
-    # TEMPORARY door: Opens port 8090 on server so home computers
-    # can take a first look. Deleted in step 5
-    ports:
-      - "8090:8090"
-
-    # where data lives. Left = folder on pool.
-    # right = where app thinks its saving
     volumes:
       - /mnt/SSDs/houseos/data/pb_data:/pb/pb_data
 
-  # The frontend: serves the app screens, forwards /api/tickets to PocketBase
+  # Front facing: serves the app screens, forwards /api/tickets to PocketBase
   caddy:
     build:
       context: .
       dockerfile: caddy/Dockerfile
     restart: unless-stopped
-
-    # TEMPORARY door: Opens port 8088 on server so home computers
-    # can take a first look. Deleted in step 5
-    ports:
-      - "8088:8080"
-
-    # Start Pocketbase first.
+    # Live inside the Tailscale container's network. Caddy can only be
+    # reached through the tunnel. (The temporary 8088 door is gone.)
+    network_mode: service:tailscale
     depends_on:
+      - tailscale
       - pocketbase
+
+    # private tunnel: Joins tailnet as "houseos" and serves HTTPS.
+  tailscale:
+    image: tailscale/tailscale:v1.98.4
+    hostname: houseos
+    restart: unless-stopped
+    # One-time join key is outside repo
+    env_file:
+    - /mnt/SSDs/houseos/houseos.env
+    environment:
+      TS_STATE_DIR: /var/lib/tailscale
+      TS_SERVE_CONFIG: /config/serve.json
+      TS_USERSPACE: "true"
+    volumes:
+      - /mnt/SSDs/houseos/data/tailscale:/var/lib/tailscale
+      - ./tailscale/serve.json:/config/serve.json:ro
