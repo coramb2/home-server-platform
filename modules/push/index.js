@@ -99,18 +99,23 @@ async function poll() {
 	}
 }
 
-async function main() {
+/** Log in as the notifier's own superuser account. */
+async function login() {
 	await pb.collection('_superusers').authWithPassword(PB_ADMIN_EMAIL, PB_ADMIN_PASSWORD);
 	console.log(`[push] authenticated to ${PB_URL}`);
-	await seed();
-	const run = () => poll().catch((e) => console.warn('[push] poll error:', e?.message ?? e));
-	setInterval(run, Number(POLL_SECONDS) * 1000);
 }
 
-process.on('unhandledRejection', (e) =>
-	console.warn('[push] unhandledRejection:', (e && e.message) || e)
-);
-main().catch((e) => {
-	console.error('[push] fatal:', e?.message ?? e);
-	process.exit(1);
-});
+async function main() {
+	await login();
+	await seed();
+	const run = async () => {
+		try {
+			// Logins expire. If ours has, log in again before polling.
+			if (!pb.authStore.isValid) await login();
+			await poll();
+		} catch (e) {
+			console.warn('[push] poll error:', e?.message ?? e);
+		}
+	};
+	setInterval(run, Number(POLL_SECONDS) * 1000);
+};
