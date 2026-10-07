@@ -14,6 +14,7 @@ services:
 
   # Front facing: serves the app screens, forwards /api/tickets to PocketBase
   caddy:
+    image: houseos-caddy:v2
     build:
       context: .
       dockerfile: caddy/Dockerfile
@@ -46,6 +47,7 @@ services:
 
   # Notification push service: sends push notifications to the app.
   push:
+    image: houseos-push:v1
     build:
       context: ./modules/push
     restart: unless-stopped

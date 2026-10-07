@@ -118,4 +118,12 @@ async function main() {
 		}
 	};
 	setInterval(run, Number(POLL_SECONDS) * 1000);
-};
+}
+
+process.on('unhandledRejection', (e) =>
+	console.warn('[push] unhandledRejection:', (e && e.message) || e)
+);
+main().catch((e) => {
+	console.error('[push] fatal:', e?.message ?? e);
+	process.exit(1);
+});
