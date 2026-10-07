@@ -8,6 +8,10 @@ COPY apps/shell/package*.json ./
 RUN npm ci --no-audit --no-fund
 # Copy the rest of the app screens source code and build it
 COPY apps/shell/ ./
+# The PUBLIC push key gets baked into app screens at build time.
+# public by design :)
+ARG VITE_VAPID_PUBLIC_KEY
+ENV VITE_VAPID_PUBLIC_KEY=$VITE_VAPID_PUBLIC_KEY
 RUN npm run build
 
 # Stage 2: Build the Caddy server with the app screens built in
