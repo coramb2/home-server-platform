@@ -18,6 +18,7 @@
 # ── Section 1: safety settings ───────────────────────────────────────────────
 set -euo pipefail    # stop on errors, unset variables, and failures inside pipes
 umask 077            # anything this script creates is readable by root only
+export PATH="/usr/sbin:/usr/bin:/sbin:/bin"   # root job: never trust an inherited PATH
 
 BACKUP_DIR="${BACKUP_DIR:-/mnt/SSDs/houseos/backup}"
 ENV_FILE="$BACKUP_DIR/restic.env"
@@ -77,7 +78,7 @@ fi
 # Each rule in datasets.list applies to a dataset and its children. For every
 # dataset, the closest rule wins (a rule on a child beats a rule on its parent).
 declare -A RULE
-while read -r action ds _; do
+while read -r action ds _ || [[ -n "${action:-}" ]]; do   # "||" also reads a last line with no newline
   [[ -z "${action:-}" || "$action" == \#* ]] && continue
   case "$action" in include|exclude|skip) ;; *) die "datasets.list: bad action '$action'";; esac
   [[ -n "${ds:-}" ]] || die "datasets.list: '$action' line has no dataset name"
