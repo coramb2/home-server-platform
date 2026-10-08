@@ -124,3 +124,25 @@ if [[ "$MODE" == "plan" ]]; then
   log "plan only: no snapshot taken, nothing sent. Warnings: $WARNINGS"
   exit 0
 fi
+
+# ── Section 4: one atomic snapshot, always cleaned up ────────────────────────
+# Leftovers from a run that crashed hard (power loss) would pin old data forever.
+zfs list -H -t snapshot -o name -r "$POOL" | grep -E '@restic-[0-9]{8}-[0-9]{6}$' \
+  | while read -r old; do log "removing leftover snapshot $old"; zfs destroy "$old"; done || true
+
+cleanup() {
+  for ds in "${DATASETS[@]}"; do
+    zfs destroy "$ds@$SNAP" 2>/dev/null || true
+  done
+  if zfs list -H -t snapshot -o name -r "$POOL" | grep -q "@$SNAP\$"; then
+    log "WARNING: some $SNAP snapshots could not be removed; the next run retries"
+  else
+    log "temporary snapshot $SNAP removed"
+  fi
+}
+trap cleanup EXIT
+
+# Listing all datasets in ONE command makes ZFS snapshot them at the same instant,
+# so the Immich database and the Photos it describes always match.
+zfs snapshot "${DATASETS[@]/%/@$SNAP}"
+log "snapshot $SNAP taken"
