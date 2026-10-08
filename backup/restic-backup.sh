@@ -44,3 +44,31 @@ done
 [[ "$(stat -c '%a %U' "$ENV_FILE")" == "600 root" ]] \
   || die "$ENV_FILE must be owned by root with mode 600"
 mkdir -p "$CACHE_DIR" "$LOG_DIR"
+
+# ── Section 2: lock, log file, the shared container command ─────────────────
+# Only one copy may run at a time (a slow backup must not overlap the next one).
+exec 9>"$LOCK_FILE"
+flock -n 9 || die "another restic-backup is already running"
+
+# Everything printed from here on also goes to a dated log file; keep 60 days.
+if [[ "$MODE" == "run" ]]; then
+  exec > >(tee -a "$LOG_DIR/$(date +%F).log") 2>&1
+  find "$LOG_DIR" -name '*.log' -mtime +60 -delete
+fi
+
+# The one docker command every mode shares: no extra privileges, cert + cache only.
+restic_container() {
+  docker run --rm --hostname gaia \
+    --env-file "$ENV_FILE" \
+    --cap-drop ALL --cap-add DAC_READ_SEARCH \
+    --security-opt no-new-privileges \
+    -v "$CA_CERT:/certs/pc-cert.pem:ro" \
+    -v "$CACHE_DIR:/cache" \
+    "$@"
+}
+
+if [[ "$MODE" == "restic" ]]; then
+  shift
+  restic_container "$RESTIC_IMAGE" --cacert /certs/pc-cert.pem --cache-dir /cache "$@"
+  exit $?
+fi
