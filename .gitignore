@@ -9,6 +9,8 @@ vapid_private*
 restic-password*
 *secret*
 !*.example
+restic.env
+datasets.list
 
 # ─── Network map / runtime data: NEVER commit (this maps the home) ───────
 # network-traffic-analyzer runtime state
