@@ -1,0 +1,15 @@
+# datasets.list.example - which ZFS datasets the nightly backup covers.
+# Real copy lives on the server: /mnt/SSDs/houseos/backup/datasets.list (not in git).
+#
+# One rule per line:  <action> <dataset>   # optional reason
+#   include  back up this dataset and all its children
+#   exclude  a child of an included dataset to leave out (caches, logs)
+#   skip     deliberately not backed up - always write why
+#
+# Every dataset in the pool must be covered by a rule (directly or through a parent).
+# The script warns about any that aren't, so new datasets can't go unprotected silently.
+
+include  POOL/app-data
+include  POOL/photos
+exclude  POOL/app-data/someapp/cache       # rebuildable, changes constantly
+skip     POOL/downloads                    # in-progress, re-downloadable
