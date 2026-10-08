@@ -146,3 +146,27 @@ trap cleanup EXIT
 # so the Immich database and the Photos it describes always match.
 zfs snapshot "${DATASETS[@]/%/@$SNAP}"
 log "snapshot $SNAP taken"
+
+# ── Section 5: back up the snapshot with restic ──────────────────────────────
+# Each dataset's snapshot is mounted read-only at the SAME path every night
+# (/data/<dataset>), so restic can tell what changed since last time.
+VOLS=()
+for i in "${!DATASETS[@]}"; do
+  src="${MOUNTS[$i]}/.zfs/snapshot/$SNAP"
+  ls "$src" >/dev/null           # opening the folder makes ZFS mount the snapshot
+  VOLS+=(-v "$src:/data/${DATASETS[$i]}:ro")
+done
+
+set +e
+restic_container "${VOLS[@]}" "$RESTIC_IMAGE" \
+  --cacert /certs/pc-cert.pem --cache-dir /cache \
+  backup /data --host gaia --tag nightly --exclude-caches
+rc=$?
+set -e
+
+case $rc in
+  0) log "backup OK (warnings: $WARNINGS)" ;;
+  3) log "backup finished but some files could not be read (exit 3)" ;;
+  *) log "backup FAILED (restic exit $rc)" ;;
+esac
+exit $rc
