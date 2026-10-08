@@ -72,3 +72,55 @@ if [[ "$MODE" == "restic" ]]; then
   restic_container "$RESTIC_IMAGE" --cacert /certs/pc-cert.pem --cache-dir /cache "$@"
   exit $?
 fi
+
+# ── Section 3: decide which datasets to back up ──────────────────────────────
+# Each rule in datasets.list applies to a dataset and its children. For every
+# dataset, the closest rule wins (a rule on a child beats a rule on its parent).
+declare -A RULE
+while read -r action ds _; do
+  [[ -z "${action:-}" || "$action" == \#* ]] && continue
+  case "$action" in include|exclude|skip) ;; *) die "datasets.list: bad action '$action'";; esac
+  [[ -n "${ds:-}" ]] || die "datasets.list: '$action' line has no dataset name"
+  [[ "$ds" == "$POOL" ]] && die "datasets.list: no rules on the pool root '$POOL'"
+  RULE["$ds"]="$action"
+done < "$LIST_FILE"
+
+effective_rule() {           # walk up the dataset path until a rule is found
+  local d="$1"
+  while [[ "$d" == */* ]]; do
+    [[ -n "${RULE[$d]:-}" ]] && { echo "${RULE[$d]}"; return; }
+    d="${d%/*}"
+  done
+  echo "none"
+}
+
+DATASETS=() ; MOUNTS=() ; WARNINGS=0
+while IFS=$'\t' read -r ds mp keystatus; do
+  [[ "$ds" == "$POOL" ]] && continue
+  rule="$(effective_rule "$ds")"
+  case "$rule" in
+    include)
+      if [[ "$keystatus" == "unavailable" ]]; then
+        log "WARNING: $ds is locked; cannot back it up"; WARNINGS=$((WARNINGS+1)); continue
+      fi
+      if [[ "$mp" != /* ]]; then
+        log "WARNING: $ds has no normal mountpoint ($mp); cannot back it up"; WARNINGS=$((WARNINGS+1)); continue
+      fi
+      DATASETS+=("$ds"); MOUNTS+=("$mp") ;;
+    none)
+      log "WARNING: $ds has no rule in datasets.list (not backed up)"; WARNINGS=$((WARNINGS+1)) ;;
+  esac
+done < <(zfs list -H -r -t filesystem -o name,mountpoint,keystatus "$POOL")
+
+[[ ${#DATASETS[@]} -gt 0 ]] || die "nothing to back up"
+for ds in "${!RULE[@]}"; do
+  zfs list -H -o name "$ds" >/dev/null 2>&1 || log "WARNING: rule for '$ds' matches no dataset (typo?)"
+done
+
+log "Datasets to back up (${#DATASETS[@]}):"
+printf '    %s\n' "${DATASETS[@]}"
+
+if [[ "$MODE" == "plan" ]]; then
+  log "plan only: no snapshot taken, nothing sent. Warnings: $WARNINGS"
+  exit 0
+fi
