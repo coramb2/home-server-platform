@@ -80,8 +80,7 @@
 		if (!title || adding) return;
 		adding = true;
 		try {
-			await pb.collection('tickets').create({ title, status: 'Open', created_by: auth.user?.id });
-			quickTitle = '';
+   			await pb.collection('tickets').create({ title, status: 'Open' });			quickTitle = '';
 		} catch (e) {
 			error = (e as Error).message;
 		} finally {
@@ -90,18 +89,15 @@
 	}
 
 	async function setStatus(ticket: Ticket, status: Status) {
-		const patch: Partial<Ticket> = { status };
-		if (status === 'Done') {
-			patch.done_at = new Date().toISOString();
-			patch.done_by = auth.user?.id;
-		} else if (ticket.status === 'Done') {
-			patch.done_at = '';
-			patch.done_by = '';
-		}
-		Object.assign(ticket, patch);
+		ticket.status = status; // show the move right away
 		tickets = tickets;
 		try {
-			await pb.collection('tickets').update(ticket.id, patch);
+			// The server stamps done_at / done_by; use what it saved.
+			const saved = await pb
+				.collection('tickets')
+				.update<Ticket>(ticket.id, { status }, { expand: 'assignee,done_by' });
+			Object.assign(ticket, saved);
+			tickets = tickets;
 		} catch (e) {
 			error = (e as Error).message;
 			load();

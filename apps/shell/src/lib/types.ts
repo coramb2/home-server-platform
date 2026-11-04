@@ -1,18 +1,18 @@
 export type Status = 'Backlog' | 'Open' | 'In Progress' | 'Waiting' | 'Done';
-export type Priority = 'P1' | 'P2' | 'P3' | 'P4';
+export type Priority = 'ASAP' | 'Floating' | 'Sooner than later';
 
 export const STATUSES: Status[] = ['Backlog', 'Open', 'In Progress', 'Waiting', 'Done'];
 // Columns shown on the board (Backlog is filed but off-board until triaged).
 export const BOARD: Status[] = ['Open', 'In Progress', 'Waiting', 'Done'];
-export const PRIORITIES: Priority[] = ['P1', 'P2', 'P3', 'P4'];
+export const PRIORITIES: Priority[] = ['ASAP', 'Floating', 'Sooner than later'];
 export const CATEGORIES = [
-	'repair',
-	'planning',
+	'chore',
+	'favor',
 	'project',
-	'errand',
-	'it-server',
-	'fun',
-	'security'
+	'reminder',
+	'date',
+	'daily',
+	'idea'
 ] as const;
 
 export interface UserRec {
@@ -33,6 +33,7 @@ export interface Ticket {
 	due_date?: string;
 	done_at?: string;
 	done_by?: string;
+	attachments?: string[];
 	created: string;
 	updated: string;
 	expand?: {
