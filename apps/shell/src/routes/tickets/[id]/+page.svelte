@@ -84,16 +84,8 @@
 		}
 	}
 	function setStatus(s: Status) {
-		const d: Partial<Ticket> = { status: s };
-		if (s === 'Done') {
-			d.done_at = new Date().toISOString();
-			d.done_by = auth.user?.id;
-		} else if (ticket?.status === 'Done') {
-			d.done_at = '';
-			d.done_by = '';
-		}
-		patch(d);
-	}
+		patch({ status: s }); // server stamps done_at / done_by
+    }
 	function saveTitle() {
 		const t = title.trim();
 		if (t && ticket && t !== ticket.title) patch({ title: t });
@@ -108,7 +100,7 @@
 		if (!b || posting) return;
 		posting = true;
 		try {
-			await pb.collection('comments').create({ ticket: id, author: auth.user?.id, body: b });
+			await pb.collection('comments').create({ ticket: id, body: b });
 			newComment = '';
 		} catch (err) {
 			error = (err as Error).message;
