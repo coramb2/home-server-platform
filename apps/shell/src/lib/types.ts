@@ -1,10 +1,17 @@
 export type Status = 'Backlog' | 'Open' | 'In Progress' | 'Waiting' | 'Done';
-export type Priority = 'ASAP' | 'Floating' | 'Sooner than later';
+export type Priority = 'ASAP' | 'Sooner than later' | 'Floating';
 
 export const STATUSES: Status[] = ['Backlog', 'Open', 'In Progress', 'Waiting', 'Done'];
 // Columns shown on the board (Backlog is filed but off-board until triaged).
 export const BOARD: Status[] = ['Open', 'In Progress', 'Waiting', 'Done'];
-export const PRIORITIES: Priority[] = ['ASAP', 'Floating', 'Sooner than later'];
+// Most urgent first. Must match the select values in the PocketBase migration.
+export const PRIORITIES: Priority[] = ['ASAP', 'Sooner than later', 'Floating'];
+// CSS-safe names for each priority (class names can't contain spaces).
+export const PRIORITY_CLASS: Record<Priority, string> = {
+	ASAP: 'asap',
+	'Sooner than later': 'sooner',
+	Floating: 'floating'
+};
 export const CATEGORIES = [
 	'chore',
 	'favor',

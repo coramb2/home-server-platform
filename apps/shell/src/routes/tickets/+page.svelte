@@ -1,8 +1,8 @@
 <script lang="ts">
 	import { pb } from '$lib/pb';
 	import { auth } from '$lib/auth.svelte';
-	import { BOARD, type Ticket, type Status } from '$lib/types';
 	import Icon from '$lib/Icon.svelte';
+	import { BOARD, PRIORITY_CLASS, type Ticket, type Status } from '$lib/types';
 
 	let tickets = $state<Ticket[]>([]);
 	let loading = $state(true);
@@ -158,7 +158,7 @@
 					{#each items as t (t.id)}
 						<article class="card" class:done={t.status === 'Done'}>
 							<div class="card-top">
-								{#if t.priority}<span class="pri pri-{t.priority}">{t.priority}</span>{/if}
+   								{#if t.priority}<span class="pri pri-{PRIORITY_CLASS[t.priority]}">{t.priority}</span>{/if}								
 								<a class="ct-title" href="/tickets/{t.id}">{t.title}</a>
 							</div>
 							<div class="meta">
@@ -338,19 +338,16 @@
 		border-radius: 5px;
 		color: #0b0f1e;
 	}
-	.pri-P1 {
-		background: var(--red);
-		box-shadow: 0 0 10px rgba(251, 113, 133, 0.5);
-	}
-	.pri-P2 {
-		background: var(--amber);
-	}
-	.pri-P3 {
-		background: var(--violet);
-	}
-	.pri-P4 {
-		background: var(--teal);
-	}
+	.pri-asap {
+   	background: var(--red);
+   	box-shadow: 0 0 10px rgba(251, 113, 133, 0.5);
+   }
+   .pri-sooner {
+   	background: var(--amber);
+   }
+   .pri-floating {
+   	background: var(--teal);
+   }
 	.meta {
 		display: flex;
 		flex-wrap: wrap;
