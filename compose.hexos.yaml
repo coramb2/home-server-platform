@@ -53,7 +53,7 @@ services:
 
   # Notification push service: sends push notifications to the app.
   push:
-    image: houseos-push:v1
+    image: houseos-push:v2
     build:
       context: ./modules/push
     restart: unless-stopped
