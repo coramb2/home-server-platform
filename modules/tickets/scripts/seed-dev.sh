@@ -44,9 +44,9 @@ mkticket() {
     -H 'Content-Type: application/json' -d "$2"
 }
 echo "→ creating sample tickets"
-mkticket "Dishwasher making a grinding noise" "{\"title\":\"Dishwasher making a grinding noise\",\"status\":\"Open\",\"priority\":\"P1\",\"category\":\"repair\",\"assignee\":\"$CORA\",\"created_by\":\"$BF\"}"
-mkticket "Plan Christmas travel" "{\"title\":\"Plan Christmas travel\",\"status\":\"In Progress\",\"priority\":\"P3\",\"category\":\"planning\",\"assignee\":\"$BF\",\"created_by\":\"$CORA\"}"
-mkticket "Waiting on landlord re: heater" "{\"title\":\"Waiting on landlord re: heater\",\"status\":\"Waiting\",\"priority\":\"P2\",\"category\":\"repair\",\"assignee\":\"$CORA\",\"created_by\":\"$CORA\"}"
-mkticket "Take out recycling" "{\"title\":\"Take out recycling\",\"status\":\"Done\",\"priority\":\"P4\",\"category\":\"errand\",\"assignee\":\"$BF\",\"created_by\":\"$CORA\",\"done_by\":\"$BF\",\"done_at\":\"$NOW\"}"
+mkticket "Dishwasher making a grinding noise" "{\"title\":\"Dishwasher making a grinding noise\",\"status\":\"Open\",\"priority\":\"ASAP\",\"category\":\"chore\",\"assignee\":\"$CORA\",\"created_by\":\"$BF\"}"
+mkticket "Plan Christmas travel" "{\"title\":\"Plan Christmas travel\",\"status\":\"In Progress\",\"priority\":\"Floating\",\"category\":\"project\",\"assignee\":\"$BF\",\"created_by\":\"$CORA\"}"
+mkticket "Waiting on landlord re: heater" "{\"title\":\"Waiting on landlord re: heater\",\"status\":\"Waiting\",\"priority\":\"Sooner than later\",\"category\":\"chore\",\"assignee\":\"$CORA\",\"created_by\":\"$CORA\"}"
+mkticket "Take out recycling" "{\"title\":\"Take out recycling\",\"status\":\"Done\",\"priority\":\"Floating\",\"category\":\"favor\",\"assignee\":\"$BF\",\"created_by\":\"$CORA\",\"done_by\":\"$BF\",\"done_at\":\"$NOW\"}"
 
 echo "✓ seeded. Log in to the app as cora@house.local / $USER_PASS"
