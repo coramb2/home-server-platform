@@ -28,6 +28,8 @@ export interface UserRec {
 	email?: string;
 }
 
+export type RepeatMode = 'fixed' | 'after_completion';
+
 export interface Ticket {
 	id: string;
 	title: string;
@@ -35,16 +37,23 @@ export interface Ticket {
 	status: Status;
 	priority?: Priority | '';
 	category?: string;
-	assignee?: string;
+	assignee: string[]; // any number of people
 	created_by?: string;
 	due_date?: string;
 	done_at?: string;
 	done_by?: string;
 	attachments?: string[];
+	// Repeating (all optional). repeat_days 0 = doesn't repeat.
+	repeat_days?: number;
+	repeat_mode?: RepeatMode | '';
+	remind_days?: number;
+	show_from?: string; // server-set: hidden from the board until then
+	series?: string; // server-set: shared by every occurrence
+	ext_key?: string;
 	created: string;
 	updated: string;
 	expand?: {
-		assignee?: UserRec;
+		assignee?: UserRec[];
 		created_by?: UserRec;
 		done_by?: UserRec;
 	};
@@ -58,18 +67,4 @@ export interface Comment {
 	created: string;
 	updated: string;
 	expand?: { author?: UserRec };
-}
-
-export interface RecurringTask {
-	id: string;
-	title: string;
-	description?: string;
-	category?: string;
-	priority?: Priority | '';
-	assignee?: string;
-	interval_days: number;
-	next_due: string;
-	active: boolean;
-	last_created?: string;
-	expand?: { assignee?: UserRec };
 }
