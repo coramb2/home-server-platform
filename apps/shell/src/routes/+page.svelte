@@ -3,12 +3,11 @@
 	import { auth } from '$lib/auth.svelte';
 	import { type Ticket } from '$lib/types';
 	import Icon from '$lib/Icon.svelte';
-	import { fetchMetrics, fmtGiB, type HostMetrics } from '$lib/metrics';
+	import { who, isUpcoming, dueChip, fmtDay, repeats } from '$lib/tickets';
 
 	let tickets = $state<Ticket[]>([]);
 	let health = $state<'checking' | 'online' | 'offline'>('checking');
 	let loading = $state(true);
-	let metrics = $state<HostMetrics | null>(null);
 
 	async function load() {
 		try {
@@ -42,20 +41,8 @@
 		};
 	});
 
-	// Poll host metrics (Glances) every 5s; null = agent not reachable.
-	$effect(() => {
-		let alive = true;
-		const tick = async () => {
-			const m = await fetchMetrics();
-			if (alive) metrics = m;
-		};
-		tick();
-		const id = setInterval(tick, 5000);
-		return () => {
-			alive = false;
-			clearInterval(id);
-		};
-	});
+	// Host metrics: the old Glances bar is gone (it could never connect).
+	// Phase 4's monitor service brings Gaia, Mars and the gateway back here.
 
 	function fmt(ms: number) {
 		if (!isFinite(ms) || ms < 0) return '—';
@@ -67,17 +54,20 @@
 	}
 	const dayKey = (d: string | Date) => new Date(d).toISOString().slice(0, 10);
 
+	// Household board only: no security tickets, nothing still scheduled.
+	const board = $derived(tickets.filter((t) => t.category !== 'security' && !isUpcoming(t)));
+
 	const stats = $derived.by(() => {
-		const done = tickets.filter((t) => t.status === 'Done' && t.done_at);
+		const done = board.filter((t) => t.status === 'Done' && t.done_at);
 		const durs = done
 			.map((t) => new Date(t.done_at as string).getTime() - new Date(t.created).getTime())
 			.filter((x) => x >= 0);
 		const avg = durs.length ? durs.reduce((a, b) => a + b, 0) / durs.length : 0;
 		const weekAgo = Date.now() - 7 * 864e5;
 		return {
-			total: tickets.length,
-			open: tickets.filter((t) => t.status === 'Open').length,
-			prog: tickets.filter((t) => t.status === 'In Progress').length,
+			total: board.length,
+			open: board.filter((t) => t.status === 'Open').length,
+			prog: board.filter((t) => t.status === 'In Progress').length,
 			done: done.length,
 			doneWeek: done.filter((t) => new Date(t.done_at as string).getTime() >= weekAgo).length,
 			avg: durs.length ? fmt(avg) : '—'
@@ -123,7 +113,18 @@
 			.sort((a, b) => b.count - a.count);
 	});
 
-	const recent = $derived(tickets.slice(0, 6));
+	const recent = $derived(board.slice(0, 6));
+
+	// Next 7 days of due dates (scheduled repeats included), soonest first.
+	const comingUp = $derived.by(() => {
+		const limit = Date.now() + 7 * 864e5;
+		return tickets
+			.filter((t) => t.category !== 'security' && t.due_date)
+			.filter((t) => t.status !== 'Done' && t.status !== 'Backlog')
+			.filter((t) => new Date(t.due_date!.replace(' ', 'T')).getTime() <= limit)
+			.sort((a, b) => a.due_date!.localeCompare(b.due_date!))
+			.slice(0, 6);
+	});
 
 	const services = $derived([
 		{
@@ -135,12 +136,7 @@
 		{ name: 'Notifications', icon: 'bell', status: 'Ready', tone: 'idle' },
 		{ name: 'Network', icon: 'activity', status: 'Planned', tone: 'plan' },
 		{ name: 'Media', icon: 'media', status: 'Planned', tone: 'plan' },
-		{
-			name: 'Host metrics',
-			icon: 'server',
-			status: metrics ? 'Online' : 'Connect agent',
-			tone: metrics ? 'ok' : 'plan'
-		}
+		{ name: 'Host metrics', icon: 'server', status: 'Phase 4', tone: 'plan' }
 	]);
 
 	const statusColor: Record<string, string> = {
@@ -150,23 +146,8 @@
 		Done: 'var(--teal)',
 		Backlog: 'var(--faint)'
 	};
-	const who = (u?: { name?: string; email?: string }) =>
-		u?.name || u?.email?.split('@')[0] || '—';
+	const names = (t: Ticket) => (t.expand?.assignee ?? []).map(who).join(' & ') || '—';
 </script>
-
-<div class="sysbar panel" class:dim={!metrics}>
-	<span class="sb-lead"><Icon name="server" size={16} /></span>
-	{#if metrics}
-		<div class="sb"><b>{Math.round(metrics.cpu ?? 0)}%</b><span>cpu</span></div>
-		<div class="sb"><b>{metrics.memPct != null ? Math.round(metrics.memPct) : '—'}%</b><span>ram</span></div>
-		<div class="sb"><b>{fmtGiB(metrics.memUsed)}</b><span>used</span></div>
-		<div class="sb"><b>{metrics.diskFreeGb != null ? metrics.diskFreeGb.toFixed(0) + ' GiB' : '—'}</b><span>disk free</span></div>
-		<div class="sb"><b>{metrics.tempC != null ? metrics.tempC + '°C' : '—'}</b><span>temp</span></div>
-		<div class="sb"><b>{metrics.uptime ?? '—'}</b><span>uptime</span></div>
-	{:else}
-		<span class="sb-note">Host metrics agent not connected — deploy Glances to light this up.</span>
-	{/if}
-</div>
 
 <div class="head">
 	<div>
@@ -178,13 +159,31 @@
 	</span>
 </div>
 
+<!-- Each tile opens the board filtered to what it counts. -->
 <div class="tiles">
-	<div class="tile"><div class="tile-num">{stats.total}</div><div class="tile-label">Total tickets</div></div>
-	<div class="tile"><div class="tile-num" style="color:var(--violet)">{stats.open}</div><div class="tile-label">Open</div></div>
-	<div class="tile"><div class="tile-num" style="color:var(--blue)">{stats.prog}</div><div class="tile-label">In progress</div></div>
-	<div class="tile"><div class="tile-num" style="color:var(--teal)">{stats.doneWeek}</div><div class="tile-label">Done this week</div></div>
+	<a class="tile" href="/tickets"><div class="tile-num">{stats.total}</div><div class="tile-label">Total tickets</div></a>
+	<a class="tile" href="/tickets?f=Open"><div class="tile-num" style="color:var(--violet)">{stats.open}</div><div class="tile-label">Open</div></a>
+	<a class="tile" href="/tickets?f=In%20Progress"><div class="tile-num" style="color:var(--blue)">{stats.prog}</div><div class="tile-label">In progress</div></a>
+	<a class="tile" href="/tickets?f=Done"><div class="tile-num" style="color:var(--teal)">{stats.doneWeek}</div><div class="tile-label">Done this week</div></a>
 	<div class="tile"><div class="tile-num grad-text">{stats.avg}</div><div class="tile-label">Avg time to done</div></div>
 </div>
+
+{#if comingUp.length}
+	<div class="panel">
+		<div class="panel-head"><span><Icon name="clock" size={15} /> Coming up · next 7 days</span><a class="more" href="/tickets?f=upcoming">Upcoming →</a></div>
+		<div class="recent">
+			{#each comingUp as t (t.id)}
+				{@const due = dueChip(t)}
+				<a class="rec-row" href="/tickets/{t.id}">
+					<span class="rec-dot" style="background:{statusColor[t.status]}"></span>
+					<span class="rec-title">{#if repeats(t)}<span class="rep-ic" title="Repeats"><Icon name="refresh" size={12} /></span>{/if}{t.title}</span>
+					<span class="rec-status" class:over={due?.tone === 'over'}>{due?.text ?? fmtDay(t.due_date)}</span>
+					<span class="rec-who">{names(t)}</span>
+				</a>
+			{/each}
+		</div>
+	</div>
+{/if}
 
 <div class="panel chart-panel">
 	<div class="panel-head">
@@ -248,51 +247,47 @@
 	{:else}
 		<div class="recent">
 			{#each recent as t (t.id)}
-				<div class="rec-row">
+				<a class="rec-row" href="/tickets/{t.id}">
 					<span class="rec-dot" style="background:{statusColor[t.status]}"></span>
 					<span class="rec-title">{t.title}</span>
 					<span class="rec-status">{t.status}</span>
-					<span class="rec-who">{who(t.expand?.assignee)}</span>
-				</div>
+					<span class="rec-who">{names(t)}</span>
+				</a>
 			{/each}
 		</div>
 	{/if}
 </div>
 
 <style>
-	.sysbar {
-		display: flex;
-		align-items: center;
-		gap: 1.5rem;
-		flex-wrap: wrap;
-		padding: 0.7rem 1.15rem;
-		margin-bottom: 1rem;
+	a.tile {
+		display: block;
+		color: inherit;
+		transition: border-color 0.15s ease, transform 0.08s ease;
 	}
-	.sb-lead {
-		display: inline-flex;
-		color: var(--violet);
+	a.tile:hover {
+		border-color: var(--line-strong);
+		transform: translateY(-1px);
 	}
-	.sb {
-		display: flex;
-		align-items: baseline;
-		gap: 0.4rem;
-	}
-	.sb b {
-		font-weight: 600;
+	a.rec-row {
 		color: var(--ink);
+		padding: 0.3rem 0.4rem;
+		margin: 0 -0.4rem;
+		border-radius: 8px;
 	}
-	.sb span {
-		font-size: 0.68rem;
-		text-transform: uppercase;
-		letter-spacing: 0.5px;
-		color: var(--muted);
+	a.rec-row:hover {
+		background: rgba(167, 139, 250, 0.08);
 	}
-	.sysbar.dim .sb-lead {
-		color: var(--faint);
+	.rep-ic {
+		display: inline-flex;
+		vertical-align: -1px;
+		margin-right: 0.35rem;
+		color: var(--blue);
 	}
-	.sb-note {
-		font-size: 0.85rem;
-		color: var(--muted);
+	.rec-status.over {
+		color: var(--red);
+	}
+	.more {
+		font-size: 0.8rem;
 	}
 	.head {
 		display: flex;

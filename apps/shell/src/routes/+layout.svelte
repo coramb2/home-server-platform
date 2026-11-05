@@ -214,13 +214,24 @@
 		padding: 1.25rem max(1rem, env(safe-area-inset-left)) 2.5rem;
 	}
 
+	/* Phones: icons only, tighter spacing, so the bar fits without sideways scroll. */
 	@media (max-width: 640px) {
 		.tab-label,
-		.who {
+		.who,
+		.name {
 			display: none;
 		}
-		.tabs {
+		.topbar {
 			gap: 0.5rem;
+		}
+		.tabs {
+			gap: 0.25rem;
+		}
+		.tab {
+			padding: 0.45rem 0.6rem;
+		}
+		.user {
+			gap: 0.4rem;
 		}
 	}
 </style>

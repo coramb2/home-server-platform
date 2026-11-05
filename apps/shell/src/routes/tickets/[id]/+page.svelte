@@ -4,35 +4,47 @@
 	import { page } from '$app/state';
 	import { goto } from '$app/navigation';
 	import Icon from '$lib/Icon.svelte';
+	import { people, loadPeople } from '$lib/users.svelte';
+	import { who, toPBDate, fmtDay, isUpcoming, repeats, previewNext } from '$lib/tickets';
 	import {
 		STATUSES,
 		PRIORITIES,
 		CATEGORIES,
 		type Ticket,
 		type Comment,
-		type UserRec,
-		type Status
+		type Status,
+		type RepeatMode
 	} from '$lib/types';
 
 	const id = page.params.id as string;
 
 	let ticket = $state<Ticket | null>(null);
 	let comments = $state<Comment[]>([]);
-	let users = $state<UserRec[]>([]);
 	let error = $state('');
 	let title = $state('');
 	let description = $state('');
 	let newComment = $state('');
 	let posting = $state(false);
 	let confirmDel = $state(false);
+	let next = $state<Ticket | null>(null); // the occurrence this one filed, if any
+
+	const EXPAND = 'assignee,created_by,done_by';
 
 	async function loadTicket() {
 		try {
 			ticket = await pb
 				.collection('tickets')
-				.getOne<Ticket>(id, { expand: 'assignee,created_by,done_by' });
+				.getOne<Ticket>(id, { expand: EXPAND });
 			title = ticket.title;
 			description = ticket.description ?? '';
+			// Repeating + done: find the next one it filed (ext_key "repeat:<this id>").
+			next =
+				repeats(ticket) && ticket.status === 'Done'
+					? await pb
+							.collection('tickets')
+							.getFirstListItem<Ticket>(pb.filter('ext_key = {:k}', { k: `repeat:${id}` }))
+							.catch(() => null)
+					: null;
 		} catch (e) {
 			error = (e as Error).message;
 		}
@@ -48,10 +60,7 @@
 	$effect(() => {
 		loadTicket();
 		loadComments();
-		pb.collection('users')
-			.getFullList<UserRec>()
-			.then((u) => (users = u))
-			.catch(() => {});
+		loadPeople();
 		let c1: (() => void) | undefined;
 		let c2: (() => void) | undefined;
 		let t: ReturnType<typeof setTimeout>;
@@ -77,11 +86,54 @@
 		if (!ticket) return;
 		Object.assign(ticket, data);
 		try {
-			await pb.collection('tickets').update(id, data);
+			// Use what the server saved: it owns stamps, show_from and series.
+			const saved = await pb.collection('tickets').update<Ticket>(id, data, { expand: EXPAND });
+			Object.assign(ticket, saved);
+			error = '';
 		} catch (e) {
 			error = (e as Error).message;
 			loadTicket();
 		}
+	}
+
+	// ── assignees: tap a person to add/remove; "Everyone" = all of them ──
+	const everyone = $derived(
+		people.list.length > 0 && people.list.every((u) => ticket?.assignee.includes(u.id))
+	);
+	function toggleAssignee(uid: string) {
+		if (!ticket) return;
+		const list = ticket.assignee.includes(uid)
+			? ticket.assignee.filter((x) => x !== uid)
+			: [...ticket.assignee, uid];
+		patch({ assignee: list });
+	}
+	function assignEveryone() {
+		patch({ assignee: everyone ? [] : people.list.map((u) => u.id) });
+	}
+
+	// ── repeat ──
+	const PRESETS = [
+		{ days: 1, label: 'Daily' },
+		{ days: 7, label: 'Weekly' },
+		{ days: 14, label: 'Every 2 weeks' },
+		{ days: 30, label: 'Monthly' },
+		{ days: 90, label: 'Every 3 months' },
+		{ days: 365, label: 'Yearly' }
+	];
+	function setRepeat(on: boolean) {
+		patch(
+			on
+				? { repeat_days: 7, repeat_mode: ticket?.repeat_mode || 'fixed', remind_days: ticket?.remind_days ?? 0 }
+				: { repeat_days: 0 }
+		);
+	}
+	function setDays(v: number) {
+		const n = Math.round(v);
+		if (n >= 1 && n <= 3650) patch({ repeat_days: n });
+	}
+	function setRemind(v: number) {
+		const n = Math.round(v);
+		if (n >= 0 && n <= 365) patch({ remind_days: n });
 	}
 	function setStatus(s: Status) {
 		patch({ status: s }); // server stamps done_at / done_by
@@ -135,7 +187,6 @@
 		}
 	}
 
-	const who = (u?: UserRec) => u?.name || u?.email?.split('@')[0] || '—';
 	const fmtDate = (s?: string) =>
 		s ? new Date(s).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '';
 	const fileUrl = (name: string) => (ticket ? pb.files.getURL(ticket, name) : '');
@@ -150,6 +201,12 @@
 	<p class="muted">Loading…</p>
 {:else}
 	<input class="title-input" bind:value={title} onblur={saveTitle} maxlength="200" aria-label="Title" />
+	{#if isUpcoming(ticket)}
+		<p class="notice"><Icon name="clock" size={15} /> Scheduled — appears on the board {fmtDay(ticket.show_from)}, due {fmtDay(ticket.due_date)}.</p>
+	{/if}
+	{#if next}
+		<p class="notice"><Icon name="refresh" size={15} /> Next one filed: <a href="/tickets/{next.id}">due {fmtDay(next.due_date)}</a></p>
+	{/if}
 	<p class="byline">
 		Filed by {who(ticket.expand?.created_by)} · {fmtDate(ticket.created)}
 		{#if ticket.status === 'Done' && ticket.done_at}
@@ -176,15 +233,66 @@
 				{#each CATEGORIES as c (c)}<option value={c}>{c}</option>{/each}
 			</select>
 		</label>
-		<label>Assignee
-			<select value={ticket.assignee ?? ''} onchange={(e) => patch({ assignee: e.currentTarget.value })}>
-				<option value="">Unassigned</option>
-				{#each users as u (u.id)}<option value={u.id}>{who(u)}</option>{/each}
-			</select>
-		</label>
 		<label>Due
-			<input type="date" value={ticket.due_date ? ticket.due_date.slice(0, 10) : ''} onchange={(e) => patch({ due_date: e.currentTarget.value })} />
+			<input type="date" value={ticket.due_date ? ticket.due_date.slice(0, 10) : ''} onchange={(e) => patch({ due_date: toPBDate(e.currentTarget.value) })} />
 		</label>
+		<div class="assign" role="group" aria-label="Assignees">
+			<span class="lbl">Assigned to</span>
+			<div class="pills">
+				{#each people.list as u (u.id)}
+					{@const on = ticket.assignee.includes(u.id)}
+					<button class="pill" class:on aria-pressed={on} onclick={() => toggleAssignee(u.id)}>
+						{#if on}<Icon name="check" size={13} />{/if}{who(u)}
+					</button>
+				{/each}
+				{#if people.list.length > 1}
+					<button class="pill" class:on={everyone} aria-pressed={everyone} onclick={assignEveryone}>
+						<Icon name="users" size={14} /> Everyone
+					</button>
+				{/if}
+			</div>
+		</div>
+	</div>
+
+	<div class="panel repeat">
+		<label class="switch">
+			<input type="checkbox" checked={repeats(ticket)} onchange={(e) => setRepeat(e.currentTarget.checked)} />
+			<span class="track"></span>
+			<span><Icon name="refresh" size={15} /> Repeats</span>
+		</label>
+		{#if repeats(ticket)}
+			<div class="rep-fields">
+				<label>Every
+					<span class="inline">
+						<input type="number" min="1" max="3650" value={ticket.repeat_days} onchange={(e) => setDays(+e.currentTarget.value)} />
+						days
+						<select value="" onchange={(e) => { setDays(+e.currentTarget.value); e.currentTarget.value = ''; }} aria-label="Preset">
+							<option value="" disabled>preset…</option>
+							{#each PRESETS as p (p.days)}<option value={p.days}>{p.label}</option>{/each}
+						</select>
+					</span>
+				</label>
+				<label>Schedule
+					<select value={ticket.repeat_mode || 'fixed'} onchange={(e) => patch({ repeat_mode: e.currentTarget.value as RepeatMode })}>
+						<option value="fixed">Fixed (from the due date)</option>
+						<option value="after_completion">From when it's done</option>
+					</select>
+				</label>
+				<label>Show early
+					<span class="inline">
+						<input type="number" min="0" max="365" value={ticket.remind_days ?? 0} onchange={(e) => setRemind(+e.currentTarget.value)} />
+						days before due
+					</span>
+				</label>
+			</div>
+			{#if ticket.status !== 'Done'}
+			<p class="rep-note">
+				Mark it Done and the next one is filed for
+				<b>{previewNext(ticket.repeat_days ?? 1, (ticket.repeat_mode || 'fixed') as RepeatMode, ticket.due_date)}</b>{#if ticket.remind_days}, showing up {ticket.remind_days}d early{/if}.
+				{#if (ticket.repeat_mode || 'fixed') === 'fixed' && !ticket.due_date}<br />Tip: set a due date so the fixed schedule has a starting point.{/if}
+			</p>
+			{/if}
+		{/if}
 	</div>
 
 	<div class="panel">
@@ -294,6 +402,146 @@
 		outline: none;
 		border-color: var(--violet);
 		background: rgba(10, 12, 26, 0.5);
+	}
+	.notice {
+		display: flex;
+		align-items: center;
+		gap: 0.45rem;
+		margin: 0 0 0.6rem;
+		padding: 0.55rem 0.8rem;
+		border-radius: var(--radius-sm);
+		background: rgba(96, 165, 250, 0.1);
+		border: 1px solid rgba(96, 165, 250, 0.25);
+		color: var(--ink);
+		font-size: 0.86rem;
+	}
+	.assign {
+		grid-column: 1 / -1;
+		display: flex;
+		flex-direction: column;
+		gap: 0.35rem;
+	}
+	.lbl,
+	.rep-fields label {
+		font-size: 0.72rem;
+		text-transform: uppercase;
+		letter-spacing: 0.5px;
+		color: var(--muted);
+	}
+	.pills {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.4rem;
+	}
+	.pill {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.3rem;
+		padding: 0.4rem 0.8rem;
+		border-radius: 999px;
+		border: 1px solid var(--line);
+		background: rgba(10, 12, 26, 0.6);
+		font-size: 0.88rem;
+	}
+	.pill:hover {
+		border-color: var(--line-strong);
+	}
+	.pill.on {
+		background: var(--grad);
+		border-color: transparent;
+		color: #fff;
+	}
+	.repeat {
+		display: flex;
+		flex-direction: column;
+		gap: 0.85rem;
+	}
+	.switch {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.6rem;
+		cursor: pointer;
+		font-size: 0.9rem;
+		width: fit-content;
+	}
+	.switch span:last-child {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.35rem;
+	}
+	.switch input {
+		position: absolute;
+		opacity: 0;
+		width: 1px;
+		height: 1px;
+	}
+	.track {
+		width: 36px;
+		height: 20px;
+		border-radius: 999px;
+		background: rgba(255, 255, 255, 0.1);
+		border: 1px solid var(--line);
+		position: relative;
+		transition: background 0.15s ease;
+	}
+	.track::after {
+		content: '';
+		position: absolute;
+		top: 2px;
+		left: 2px;
+		width: 14px;
+		height: 14px;
+		border-radius: 50%;
+		background: var(--muted);
+		transition: transform 0.15s ease;
+	}
+	.switch input:checked + .track {
+		background: var(--grad);
+	}
+	.switch input:checked + .track::after {
+		transform: translateX(16px);
+		background: #fff;
+	}
+	.switch input:focus-visible + .track {
+		box-shadow: 0 0 0 3px rgba(139, 92, 246, 0.35);
+	}
+	.rep-fields {
+		display: grid;
+		grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+		gap: 0.75rem;
+	}
+	.rep-fields label {
+		display: flex;
+		flex-direction: column;
+		gap: 0.3rem;
+	}
+	.inline {
+		display: flex;
+		align-items: center;
+		gap: 0.4rem;
+		text-transform: none;
+		letter-spacing: normal;
+		font-size: 0.86rem;
+		color: var(--muted);
+	}
+	.rep-fields input,
+	.rep-fields select {
+		padding: 0.5rem 0.55rem;
+		background: rgba(10, 12, 26, 0.6);
+		border: 1px solid var(--line);
+		border-radius: 8px;
+		font-size: 0.9rem;
+		text-transform: none;
+		letter-spacing: normal;
+	}
+	.rep-fields input[type='number'] {
+		width: 5.5rem;
+	}
+	.rep-note {
+		margin: 0;
+		color: var(--muted);
+		font-size: 0.85rem;
+		line-height: 1.5;
 	}
 	.byline {
 		margin: 0 0 1.25rem;

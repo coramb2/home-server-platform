@@ -23,10 +23,19 @@ pb.autoCancellation(false);
 
 const nameOf = (u) => u?.name || u?.email?.split('@')[0] || 'someone';
 
-// State: last-known assignee per ticket, and comment ids we've already handled.
-// Seeded on startup (no push) so existing data doesn't trigger a notification flood.
-const assigneeOf = new Map();
+// State: who we've already told about each ticket, and comment ids we've
+// already handled. Seeded on startup (no push) so existing data doesn't
+// trigger a notification flood.
+const notified = new Map(); // ticket id -> Set of user ids
 const seenComments = new Set();
+
+// Tickets can have several assignees (an array). Older data may be a string.
+const assigneesOf = (t) => (Array.isArray(t.assignee) ? t.assignee : t.assignee ? [t.assignee] : []);
+// A repeating ticket waits off the board until its reminder window (show_from).
+// Until then nobody hears about it; when it appears, its assignees do.
+const isVisible = (t) => !t.show_from || new Date(t.show_from.replace(' ', 'T')).getTime() <= Date.now();
+const fmtDay = (d) =>
+	new Date(d.replace(' ', 'T')).toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' });
 
 /** Deliver a push to every subscription of `userId`; prune dead ones (404/410). */
 async function pushToUser(userId, payload) {
@@ -51,9 +60,12 @@ async function pushToUser(userId, payload) {
 	}
 }
 
+const TICKET_FIELDS = 'id,title,assignee,show_from,due_date';
+
 async function seed() {
-	const tickets = await pb.collection('tickets').getFullList({ fields: 'id,assignee' });
-	for (const t of tickets) assigneeOf.set(t.id, t.assignee || '');
+	const tickets = await pb.collection('tickets').getFullList({ fields: TICKET_FIELDS });
+	// Hidden tickets stay unseeded, so they notify when they appear.
+	for (const t of tickets) if (isVisible(t)) notified.set(t.id, new Set(assigneesOf(t)));
 	const comments = await pb.collection('comments').getFullList({ fields: 'id' });
 	for (const c of comments) seenComments.add(c.id);
 	console.log(
@@ -62,37 +74,43 @@ async function seed() {
 }
 
 async function poll() {
-	// New assignments: notify the (new) assignee when a ticket's assignee changes.
-	const tickets = await pb.collection('tickets').getFullList({ fields: 'id,title,assignee' });
+	// Assignments: tell each person newly assigned to a visible ticket.
+	// (Several assignees are fine; each is told once.)
+	const tickets = await pb.collection('tickets').getFullList({ fields: TICKET_FIELDS });
 	for (const t of tickets) {
-		const prev = assigneeOf.get(t.id);
-		const now = t.assignee || '';
-		assigneeOf.set(t.id, now);
-		if (prev === now) continue;
-		if (now)
-			await pushToUser(now, {
-				title: 'Ticket assigned to you',
+		if (!isVisible(t)) continue;
+		const known = notified.get(t.id);
+		const now = assigneesOf(t);
+		notified.set(t.id, new Set(now));
+		const fresh = known ? now.filter((u) => !known.has(u)) : now;
+		// First time we see a repeating ticket = it just appeared on the board.
+		const appeared = !known && t.show_from && t.due_date;
+		for (const u of fresh)
+			await pushToUser(u, {
+				title: appeared ? `Coming up · due ${fmtDay(t.due_date)}` : 'Ticket assigned to you',
 				body: t.title,
 				tag: `ticket-${t.id}`,
-				url: '/'
+				url: `/tickets/${t.id}`
 			});
 	}
 
-	// New comments: notify the ticket assignee (except the comment's author).
+	// New comments: notify every assignee except the comment's author.
 	const comments = await pb.collection('comments').getFullList({ sort: 'created' });
 	for (const c of comments) {
 		if (seenComments.has(c.id)) continue;
 		seenComments.add(c.id);
 		try {
 			const ticket = await pb.collection('tickets').getOne(c.ticket);
-			if (!ticket.assignee || ticket.assignee === c.author) continue;
+			const to = assigneesOf(ticket).filter((u) => u !== c.author);
+			if (!to.length) continue;
 			const author = await pb.collection('users').getOne(c.author).catch(() => null);
-			await pushToUser(ticket.assignee, {
-				title: `New comment from ${nameOf(author)}`,
-				body: ticket.title,
-				tag: `ticket-${ticket.id}`,
-				url: '/'
-			});
+			for (const u of to)
+				await pushToUser(u, {
+					title: `New comment from ${nameOf(author)}`,
+					body: ticket.title,
+					tag: `ticket-${ticket.id}`,
+					url: `/tickets/${ticket.id}`
+				});
 		} catch {
 			/* ticket/author lookup failed — skip */
 		}

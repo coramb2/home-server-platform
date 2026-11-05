@@ -69,87 +69,70 @@ to UniFi, Pi-hole, Tailscale, Mars, and the traffic analyzer, and redesigns recu
   `monitor`. Ticket create rule allows it; it can't read users, delete, or change schema.
 - Node (like `push`) so the whole backend is one language you already read.
 
-## 4. Recurring tasks v2
+## 4. Repeating tickets (revised 2026-11-04 — replaces the template design)
 
-### 4.1 Model
+**Decision (Cora):** recurring is not a separate thing. Any ticket can *optionally* repeat.
+The earlier template → instance design (separate `recurring_tasks` list + hourly cron) was
+dropped: two screens, two forms, and a cron to keep in sync for what is really one setting.
 
-Recurring stays **template → ticket instance**. The alternative, one record that toggles
-done/not-done, loses history: no per-person stats, no comments per occurrence, no on-time rate.
+### 4.1 Model — a chain of tickets
 
-`recurring_tasks` (changes in **bold**)
+Each occurrence is an ordinary ticket. History (who did it, comments, on-time) stays per
+occurrence, which was the reason for templates in the first place.
 
-| Field | Type | Notes |
-|---|---|---|
-| title, description, category, priority, assignee | — | copied onto each instance |
-| interval_days | number ≥1 | |
-| **schedule_mode** | select `fixed` \| `after_completion` | fixed: trash every Tue. after_completion: HVAC filter 90 days after the last change. |
-| next_due | date | due date of the **upcoming / current** cycle |
-| **remind_days** | number ≥0 | lead time: instance appears on the board (and pushes) this many days before `next_due`. 0 = appears on the due date. |
-| **current_ticket** | relation → tickets | the open instance, or empty |
-| **last_completed** | date | replaces `last_created` |
-| active | bool | paused templates create nothing |
+`tickets` new fields
 
-`tickets`: add **`recurring`** (relation → recurring_tasks). Stops parsing `ext_key` to find
-the template.
+| Field | Type | Set by | Notes |
+|---|---|---|---|
+| repeat_days | number 0–3650 | person | 0 / empty = doesn't repeat |
+| repeat_mode | `fixed` \| `after_completion` | person | fixed: from the due date. after: from the day it's done |
+| remind_days | number 0–365 | person | next one appears this many days before it's due |
+| show_from | date | **server** | hidden from the board until then; = due − remind_days for server-filed occurrences, empty otherwise |
+| series | text | **server** | id of the first ticket; shared by every occurrence |
+| assignee | relation, **many** | person | was one person; now any number ("Everyone" = all) |
 
-### 4.2 Lifecycle
+`ext_key` on a successor = `repeat:<previous ticket id>`. The partial unique index makes a
+second successor impossible, even under a race. People can't set `ext_key`, `series` or
+`show_from` (hooks overwrite them).
+
+### 4.2 Lifecycle (`pb_hooks/repeat.pb.js`, logic in `repeat_lib.js`)
 
 ```
-            now ≥ next_due − remind_days                  status → Done
- SCHEDULED ─────────────────────────────► ON BOARD ──────────────────────► SCHEDULED
- (hidden)    hourly cron creates 1 ticket   (Open/…; due chip;               (next cycle)
-             due_date = next_due            "due"/"overdue" badge)
-             push → assignee                 never a 2nd copy while open
+ Open … ──Done──► server files the next ticket (Open, due = next, show_from = next − remind)
+   ▲                 │ hidden until show_from ("Upcoming" filter) → then on the board
+   └──reopen─────────┘ successor deleted if untouched (still Open, no comments); else kept
 ```
 
-**Create (cron, hourly):** for each active template with no `current_ticket` and
-`now ≥ next_due − remind_days`: create ticket `{status: Open, due_date: next_due, recurring: id,
-ext_key: "recurring:<id>:<next_due>"}`, set `current_ticket`. Wrapped in one transaction.
-`ext_key` gets a **partial unique index**
-(`CREATE UNIQUE INDEX … ON tickets (ext_key) WHERE ext_key != ''`) so a double run can't
-duplicate. It must be partial because PocketBase stores empty text as `''`, which would
-collide.
+- **fixed:** next = due + N; skip forward while ≤ today (missed cycles aren't queued).
+  No due date → behaves like after_completion.
+- **after_completion:** next = today + N.
+- "today" = container's local date (`TZ=America/New_York`). Dates stored at 12:00 UTC and
+  displayed in UTC, so a date is the same calendar day in every US zone.
+- No cron: appearing is just `show_from <= now`, evaluated by the board and by the push service.
+- Editing repeat settings affects the *next* filing; turning repeat off ends the series.
 
-**Complete (server hook on ticket update → Done):**
-- Server sets `done_at = now`, `done_by = @request.auth.id` for **all** tickets (the browser no
-  longer sends them).
-- If `recurring` is set:
-  - `fixed`: `next = due_date + interval`; while `next ≤ now`, add interval again. Missed
-    cycles are skipped rather than queued up.
-  - `after_completion`: `next = done_at + interval`.
-  - Set template `next_due = next`, `last_completed = done_at`, clear `current_ticket`.
+**Notifications (push service):** each newly-added assignee is told once; a hidden occurrence
+is silent until `show_from`, then its assignees get "Coming up · due <date>". Comments notify
+every assignee except the author.
 
-**Reopen (Done → anything else) on a recurring instance:** the instance's own `due_date` is the
-cycle it belonged to, so restore `next_due = ticket.due_date` and `current_ticket = ticket`.
-No extra bookkeeping field needed.
-
-**Board:** hide `recurring != "" && status = "Done"`. History stays in the database and in
-stats. A "show completed" toggle reveals them.
-
-**Notifications:** push to the assignee (anyone if unassigned) when the instance appears, on
-the due date, and once when it goes overdue. Not daily nagging.
-
-**Edits:** changing interval, mode, or reminder applies from the next cycle. The open instance
-keeps its due date.
-
-**Dates:** date-only values (`due_date`, `next_due`) are stored at **12:00 UTC**. That falls on
-the same calendar date in every US time zone, which fixes the "Nov 10 shows as Nov 9" bug.
-Container gets `TZ=America/New_York` so logs and cron read in local time.
+**Migration `1752192007`:** each `recurring_tasks` template → a repeating ticket (active →
+Open, paused → Backlog), `ext_key = migrated:<template id>`. The old collection is locked to
+superusers, not deleted; drop it in a cleanup PR once v2 is verified.
 
 ### 4.3 UI
 
-- Tickets header gets a real **segmented control**: `Board | Recurring (n)`, the same size as
-  the Add button. Removes the subtitle link.
-- Recurring list: one card per template showing title, "every 7 days · fixed", next due,
-  "appears 2 days before", assignee, and a state chip (`scheduled` / `on board` / `overdue` /
-  `paused`). Inline **Complete now** acts on the current instance.
-- Create/edit form adds **Repeat mode** and **Remind me _n_ days before**.
-- Board cards for instances get a ↻ badge and a due/overdue chip.
-- **Stats** (household, excluding `security`):
-  - Tiles: *Due this week (recurring)*, *Overdue*, *On-time rate* (completed with
-    `done_at ≤ due_date` ÷ completed, last 90 days).
-  - Per-person completions include recurring instances.
-- Dashboard: "Coming up" list, the next 7 days of recurring due dates.
+- Board: filter chips (All · Mine · Open · In Progress · Waiting · Done · Repeating ·
+  Upcoming · Backlog) stored in `?f=` so dashboard tiles deep-link. Whole card is clickable
+  (stretched link). Cards show ↻ interval, due/overdue chip, assignee avatars.
+- Ticket page: assignee pills + Everyone; **Repeats** switch with every-N-days (+ presets),
+  schedule mode, show-early days, and a preview of the next due date.
+- Dashboard: tiles link to the filtered board; "Coming up · next 7 days"; host-metrics bar
+  removed until Phase 4.
+- Users can list each other (`users.listRule = @request.auth.collectionName = 'users'`);
+  emails stay hidden by PocketBase's `emailVisibility`.
+
+**Deferred:** on-time-rate tile, due/overdue pushes (would need a cron), hiding old Done
+occurrences.
 
 ## 5. Host metrics
 
@@ -259,8 +242,7 @@ sidecar as the front door. Whatever is decided:
 |---|---|---|
 | **0** | *(no code)* Find the ts.net URL, `git pull` + `up -d --build` on Gaia; do the 30-min restore drill while you're there | Both of you log in from your phones |
 | **1** | Ticket security fixes (§7 rules, completion hook, partial unique `ext_key`), fix the 4 type errors | Can't post as the other user; done_by set by server |
-| **2** | Recurring schema + lifecycle hook + hourly cron | Script test: appear at due − remind; complete hides it; fixed vs after-completion compute the right next due; reopen restores |
-| **3** | Recurring UI + stats tiles + segmented control | Screenshot-worthy board; recurring visible in stats |
+| **2+3** | ✅ Tickets v2 (PR `feat/tickets-v2`): repeat on tickets, multi-assignee, users visible, clickable board/dashboard | Done → next filed; reopen takes it back; both users assignable |
 | **4** | `monitor` skeleton (auth, cache, service user) + TrueNAS source; rewrite `metrics.ts`; Caddy route | Gaia card live on dashboard |
 | **5** | UniFi source + `known_devices` + Network page (subnets, clients) + unknown-device / wrong-subnet tickets | A test device joining files exactly one ticket; Approve closes it |
 | **6** | Pi-hole + Tailscale + Mars `node_exporter` + gateway health | All three host cards live; DNS panel |

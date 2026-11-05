@@ -15,7 +15,7 @@ It's built as equal parts useful tool and learning project.
 ## Status
 
 **Live in production** on a HexOS / TrueNAS SCALE 25.10 home server, reachable only over
-Tailscale with HTTPS. Running today: tickets, recurring tasks, the dashboard and scoreboard,
+Tailscale with HTTPS. Running today: tickets (shared assignees, optional repeat), the dashboard and scoreboard,
 and phone push notifications.
 
 | Module | Status |
@@ -149,16 +149,15 @@ Each working milestone is tagged, so there's always a known-good version to retu
 
 ## Roadmap
 
-Next up: nightly backups with a tested restore, then a round of small improvements —
-moving the `users` access rules into a migration, running the scheduler on local time,
-an assignee picker on the new-ticket form, and an "upcoming recurring tasks" view.
+Next up: host metrics (the `monitor` service, design Phase 4), then the Network page and
+unknown-device alerts. Design: [docs/design/v2-recurring-network-metrics.md](docs/design/v2-recurring-network-metrics.md).
 See **[ROADMAP.md](ROADMAP.md)** for the full sprint backlog and the 30-day adoption checkpoint.
 
 ## Repository layout
 
 ```
 apps/shell/            SvelteKit PWA — the HouseOS frontend
-modules/tickets/       PocketBase: Dockerfile, migrations (schema), hooks (recurring tasks)
+modules/tickets/       PocketBase: Dockerfile, migrations (schema), hooks (stamps, repeating tickets)
 modules/push/          Web Push notifier (Node)
 modules/alert-bridge/  turns network-analyzer alerts into tickets (not yet deployed)
 caddy/                 Caddy Dockerfile (builds the shell in) + Caddyfiles
