@@ -6,7 +6,10 @@ services:
   pocketbase:
     # Versioned name: bump the tag whenever migrations or hooks change,
       # so TrueNAS builds a fresh image instead of reusing the old one.
-    image: houseos-pocketbase:v2
+    image: houseos-pocketbase:v4
+    environment:
+        # "today" for repeating tickets = the household's day, not UTC's
+      TZ: America/New_York
     build:
       context: ./modules/tickets
       args:
@@ -17,7 +20,7 @@ services:
 
   # Front facing: serves the app screens, forwards /api/tickets to PocketBase
   caddy:
-    image: houseos-caddy:v3
+    image: houseos-caddy:v4
     build:
       context: .
       dockerfile: caddy/Dockerfile
