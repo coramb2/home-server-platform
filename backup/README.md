@@ -1,10 +1,13 @@
 # Backups (restic)
 
-Nightly, encrypted, off-machine backup of the server's ZFS datasets to a
+Daily, encrypted, off-machine backup of the server's ZFS datasets to a
 [rest-server](https://github.com/restic/rest-server) on another machine on the LAN.
 
+**Status:** running daily since 2026-11-05. Restore drill passed 2026-11-11 (see
+[Restore drill log](#restore-drill-log)).
+
 ```
-TrueNAS cron (root, nightly)
+TrueNAS cron (root, daily)
   └─ backup/restic-backup.sh
        1. read datasets.list  → which datasets to back up, warn about any without a rule
        2. zfs snapshot (ONE command → all datasets frozen at the same instant)
@@ -63,7 +66,12 @@ Exit codes: `0` OK · `3` backup made but some files were unreadable · anything
 4. First backup by hand: `sudo ./backup/restic-backup.sh`.
 5. Check the nested datasets made it in, e.g.
    `sudo ./backup/restic-backup.sh restic ls latest /data/SSDs/Applications/immich/postgres_data | head`
-6. TrueNAS → System → Advanced → Cron Jobs: run the script nightly as `root`.
+6. TrueNAS → System → Advanced → Cron Jobs: run the script daily as `root`, then press
+   **Run Now** once and check the log ends in `backup OK`.
+7. **The receiving machine must be awake at run time.** A PC that sleeps or hibernates simply
+   doesn't answer ("no route to host"). Either pick a time it's reliably on, or add a scheduled
+   task on it that wakes it shortly before the run and keeps it awake until the new snapshot
+   arrives (Windows: Task Scheduler "Wake the computer" + `SetThreadExecutionState`).
 
 ## Retention (pruning)
 
@@ -77,7 +85,10 @@ restic -r <repository folder> forget --keep-daily 7 --keep-weekly 4 --keep-month
 ## Restore
 
 Always restore into a **new, empty** location, never over live data. Restoring needs
-write access, so it doesn't use the restricted `restic` mode:
+write access (it sets file owners back), so it doesn't use the restricted `restic` mode.
+
+Pick the snapshot by ID (`restic snapshots`) rather than `latest`, so you know exactly
+what you restored:
 
 ```bash
 sudo zfs create SSDs/restore-test
@@ -87,14 +98,92 @@ sudo docker run --rm \
   -v /mnt/SSDs/restore-test:/restore \
   restic/restic:0.19.1@sha256:136600b6ff6843d61d355f7f71f460a166429f35de6fd11b568fece3c9a4d510 \
   --cacert /certs/pc-cert.pem \
-  restore latest --target /restore --include /data/SSDs/houseos
+  restore <snapshot-id> --target /restore \
+  --include /data/SSDs/houseos \
+  --verify
 ```
 
-Files land in `/mnt/SSDs/restore-test/data/SSDs/houseos/`. Compare, copy back what's
-needed with the app stopped, then `sudo zfs destroy SSDs/restore-test`.
+Files land in `/mnt/SSDs/restore-test/data/<dataset>/`. `--verify` reads every restored
+file back and compares it with the backup. Add one `--include` per path you need.
+(restic's "Restored X / Y files" can show X > Y with `--include`: it also counts the parent
+folders it creates. Not an error.)
 
-> A backup is only proven by a restore. Run a restore drill after setup and after any
-> change to this script.
+To put data back: stop the app, copy the restored files over its data folder keeping owners
+(`cp -a`), start the app. Then `sudo zfs destroy -r SSDs/restore-test`: the restored copy
+includes `backup/restic.env`, and while the dataset exists every backup run warns about it.
+
+> A backup is only proven by a restore. Run a drill after setup, after any change to this
+> script, and after an app changes where it stores data.
+
+## Restore drill
+
+A drill proves three things, in order:
+
+1. **The repository can be read and decrypted:** `restic snapshots` lists today's backup.
+2. **Files come back exact, with the right owners:** the restore above with `--verify`, then
+   `ls -ln` on the restored folders. Owners must be the app's numeric uid (PocketBase `1000`,
+   Postgres `999`), not `root`, or the app won't start on them.
+3. **The apps accept the restored data:** start each one on the restored copy and compare
+   with live. Files that restore fine can still be a database that won't open.
+
+Rules for step 3:
+
+- **`--network none`** on every test container: the copy can't reach Tailscale, push, other
+  apps, or the internet, so it can't be mistaken for the real thing.
+- **Same image as live, by ID:** `docker inspect <live container> --format '{{.Image}}'`.
+  Tags can be re-pointed; Immich's vector indexes need the exact extension version.
+- **Same mount point and startup arguments as live:** read them, don't guess:
+  `docker inspect <live> --format '{{range .Mounts}}{{.Source}} -> {{.Destination}}{{println}}{{end}}'`
+  and `--format '{{json .Config.Cmd}}'`. A wrong mount makes Postgres start **empty** and
+  look healthy.
+- **Never print the env with the password:** filter it, e.g. `| grep -E '^(POSTGRES_USER|POSTGRES_DB|PGDATA)='`.
+
+### PocketBase (tickets)
+
+```bash
+P=/mnt/SSDs/restore-test/data/SSDs/houseos/data/pb_data
+# 1. SQLite's own check + row counts; run the same on live with mode=ro (safe while running)
+sudo python3 -c "
+import sqlite3,sys; c=sqlite3.connect(sys.argv[1])
+print('integrity:', c.execute('pragma integrity_check').fetchone()[0])
+for (t,) in c.execute(\"select name from _collections where type != 'view' order by name\"):
+    print(' ', t, c.execute(f'select count(*) from \"{t}\"').fetchone()[0])" "$P/data.db"
+# 2. Does the real app image accept it? (runs the migrations, too)
+sudo docker run -d --rm --name pb-restore-test --network none -v "$P:/pb/pb_data" houseos-pocketbase:<tag>
+sudo docker exec pb-restore-test wget -qO- http://127.0.0.1:8090/api/health   # "API is healthy."
+sudo docker stop pb-restore-test
+```
+
+### Immich Postgres (Postgres 18)
+
+Postgres 18 images mount the volume at **`/var/lib/postgresql`** (not `…/data`) with
+`PGDATA=/var/lib/postgresql/18/docker`. The TrueNAS app also passes
+`-c config_file=/etc/postgresql/postgresql.conf`, which loads the vector extension.
+
+```bash
+sudo docker run -d --rm --name pg-restore-test --network none \
+  -v /mnt/SSDs/restore-test/data/SSDs/Applications/immich/postgres_data:/var/lib/postgresql \
+  -e PGDATA=/var/lib/postgresql/18/docker \
+  -e POSTGRES_USER=immich -e POSTGRES_DB=immich -e POSTGRES_PASSWORD=unused \
+  <live image ID> <live Cmd args>
+until sudo docker exec pg-restore-test pg_isready -U immich -q; do sleep 2; done
+sudo docker logs pg-restore-test 2>&1 | tail -15
+```
+
+Expected in the logs: `not properly shut down; automatic recovery in progress` → `redo done`
+→ `ready to accept connections`. That is Postgres recovering from the snapshot exactly as
+after a power cut ("crash-consistent"). It is the **pass** condition, not an error.
+
+Compare restored vs live with the same query on both (`docker exec … psql -U immich -d immich`).
+Count only rows created **before the snapshot time**, or phone uploads made since will look
+like data loss: `select count(*) from asset where "createdAt" < '<snapshot time>'`, plus
+`album`, `"user"`, and `pg_extension` (names + versions must match).
+
+### Restore drill log
+
+| Date | Snapshot | Restored | Result |
+|---|---|---|---|
+| 2026-11-11 | `6c2edd73` | `SSDs/houseos`, Immich `postgres_data` (537 MiB, 2,228 files verified) | ✅ PocketBase: integrity ok, all 10 tables = live, v4 image healthy. ✅ Immich DB: crash recovery clean, extensions = live. ⚠️ Immich had 0 assets, so photo data not yet proven; re-drill once in use. |
 
 ## Upgrading restic
 
@@ -109,5 +198,10 @@ needed with the app stopped, then `sudo zfs destroy SSDs/restore-test`.
 - Snapshots give *crash-consistent* databases (like after a power cut). Postgres and SQLite
   recover from that by design; app-native dumps (PocketBase backups, Immich DB dumps) are a
   second layer.
+- **Dataset names containing spaces** can't get a rule yet (the parser splits at the space),
+  so they warn on every run and are not backed up. Fix pending in the script.
+- **Failures before the log file opens** (missing env file, bad permissions, lock held) print
+  to stdout, which the cron job hides: no log entry. Fix pending (`die()` → stderr). Until then,
+  a day with *no* log file is a failure too.
 - Ransomware with admin rights on the receiving machine could still reach its disk. An
   offline or off-site third copy is planned.
