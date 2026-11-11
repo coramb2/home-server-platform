@@ -179,11 +179,36 @@ Count only rows created **before the snapshot time**, or phone uploads made sinc
 like data loss: `select count(*) from asset where "createdAt" < '<snapshot time>'`, plus
 `album`, `"user"`, and `pg_extension` (names + versions must match).
 
+### From the receiving machine ("the server is dead")
+
+The drill above uses the server's own `restic.env`. The real disaster case has only the
+receiving machine, its repository folder, and the **paper copy of the encryption password**.
+Test that path too: it is the only test of the paper copy.
+
+Use the same restic version as the server, from the official release, hash-checked against
+`SHA256SUMS`, in an admin-only folder (it runs elevated, so a user-writable exe would be a
+privilege-escalation path). Then, from an admin shell:
+
+```powershell
+restic.exe -r <repository folder> --no-lock --no-cache snapshots
+restic.exe -r <repository folder> --no-lock --no-cache `
+  restore <snapshot-id> --target C:\restore-test --include /data/SSDs/houseos/data/pb_data --verify
+```
+
+`--no-lock --no-cache` keeps restic from writing anything into the repository, whose folder
+belongs to the rest-server service account. Check the restored `data.db` with the same
+integrity + count script as above (WSL sees `C:` as `/mnt/c`), then delete `C:\restore-test`
+(it holds user password hashes).
+
+**Windows does not keep Linux owners.** When rebuilding a server from this copy, fix them
+before starting the apps: `chown -R 1000:1000 pb_data`, `chown -R 999:999` for Postgres data.
+
 ### Restore drill log
 
 | Date | Snapshot | Restored | Result |
 |---|---|---|---|
 | 2026-11-11 | `6c2edd73` | `SSDs/houseos`, Immich `postgres_data` (537 MiB, 2,228 files verified) | ✅ PocketBase: integrity ok, all 10 tables = live, v4 image healthy. ✅ Immich DB: crash recovery clean, extensions = live. ⚠️ Immich had 0 assets, so photo data not yet proven; re-drill once in use. |
+| 2026-11-11 | `6c2edd73` | From the receiving machine, offline: `pb_data` (232 MiB, 27 files verified) | ✅ Repository opened with the stored encryption password; integrity ok, all 10 tables = live. |
 
 ## Upgrading restic
 
