@@ -24,7 +24,7 @@ and phone push notifications.
 | Recurring tasks (auto-file tickets on a schedule) | ✅ Live |
 | Push notifications (assignments + comments) | ✅ Live |
 | Private access over Tailscale (HTTPS) | ✅ Live |
-| Backups + restore drill | 🔜 Next |
+| Backups (daily, encrypted, off-machine) + restore drill | ✅ Live — drill passed 2026-11-11 |
 | Network monitoring (traffic analyzer + alert bridge) | 📋 Planned — bridge code exists, analyzer not yet deployed |
 | Media | 📋 Planned — will link to the existing Jellyfin server rather than replace it |
 | Host metrics | ⏸ Deferred — the original design needed full Docker access; TrueNAS's own Reporting covers it for now |
