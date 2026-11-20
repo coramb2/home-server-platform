@@ -1,0 +1,11 @@
+{
+	"name": "houseos-media-window",
+	"version": "0.1.0",
+	"private": true,
+	"type": "module",
+	"description": "Rolling episode window: keeps the next episodes downloaded based on Plex watch state.",
+	"scripts": {
+		"test": "node --test",
+		"start": "node index.js"
+	}
+}
