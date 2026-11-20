@@ -67,7 +67,7 @@ services:
       
   # Rolling episode window: reads Plex watch state, tells Sonarr which episodes to get next.
   media-window:
-    image: houseos-media-window:v1
+    image: houseos-media-window:v2
     build:
       context: ./modules/media-window
     restart: unless-stopped

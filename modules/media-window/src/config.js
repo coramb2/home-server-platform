@@ -1,4 +1,5 @@
 import { readFile } from 'node:fs/promises';
+import { parseRanges } from './ranges.js';
 
 const LIBRARIES = {
 	live_action: { root: '/data/TV Shows/Live Action', seriesType: 'standard' },
@@ -47,6 +48,18 @@ export async function loadShows(file) {
 			}
 		}
 		const batchSize = int(s.batchSize, 1, 25, 10, `${where}.batchSize`);
+				let filler;
+		if (s.filler !== undefined) {
+			if (s.library !== 'anime') throw new Error(`${where}.filler is only for library "anime"`);
+			const ask = parseRanges(s.filler.ask, `${where}.filler.ask`);
+			const skip = parseRanges(s.filler.skip, `${where}.filler.skip`);
+			const download = parseRanges(s.filler.download, `${where}.filler.download`);
+			for (const n of [...skip, ...download]) {
+				if (!ask.has(n)) throw new Error(`${where}.filler: episode ${n} is decided but not in "ask"`);
+				if (skip.has(n) && download.has(n)) throw new Error(`${where}.filler: episode ${n} is in both skip and download`);
+			}
+			filler = { ask, skip, download };
+		}
 		return {
 			tvdbId: s.tvdbId,
 			title: typeof s.title === 'string' ? s.title : `tvdb ${s.tvdbId}`,
@@ -57,7 +70,8 @@ export async function loadShows(file) {
 			startEpisode: int(s.startEpisode, 1, 9999, 1, `${where}.startEpisode`),
 			batchSize,
 			triggerAt: int(s.triggerAt, 0, batchSize, 3, `${where}.triggerAt`),
-			enabled: s.enabled !== false
+			enabled: s.enabled !== false,
+			filler
 		};
 	});
 }
