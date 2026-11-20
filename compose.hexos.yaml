@@ -64,3 +64,21 @@ services:
       PB_URL: http://pocketbase:8090
     depends_on:
       - pocketbase
+      
+  # Rolling episode window: reads Plex watch state, tells Sonarr which episodes to get next.
+  media-window:
+    image: houseos-media-window:v1
+    build:
+      context: ./modules/media-window
+    restart: unless-stopped
+    # Own secrets file (Sonarr key, Plex token), outside the repo.
+    env_file:
+      - /mnt/SSDs/houseos/media-window.env
+    environment:
+      SHOWS_FILE: /config/shows.json
+      TZ: America/New_York
+    volumes:
+      - /mnt/SSDs/houseos/media-window/shows.json:/config/shows.json:ro
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
