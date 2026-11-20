@@ -4,11 +4,12 @@
 const key = (season, episode) => `S${season}E${episode}`;
 
 export function planWindow({ episodes, watched, show, now }) {
-	// 1. Main episodes in viewing order. Season 0 (specials) is skipped.
+	// 1. Main episodes in viewing order. Season 0 (specials) and skipped filler are left out.
+	const skip = show.filler?.skip ?? new Set();
 	const eps = episodes
 		.filter((ep) => ep.seasonNumber > 0)
+		.filter((ep) => !skip.has(ep.absoluteEpisodeNumber))
 		.sort((a, b) => a.seasonNumber - b.seasonNumber || a.episodeNumber - b.episodeNumber);
-
 	// 2. Where the show starts for us.
 	const startIdx = eps.findIndex(
 		(ep) => ep.seasonNumber === show.startSeason && ep.episodeNumber === show.startEpisode
@@ -35,12 +36,34 @@ export function planWindow({ episodes, watched, show, now }) {
 	}
 
 	// 5. The next batch: after the last lined-up episode, aired, not yet there or wanted.
+	//    With filler rules: stop before any episode that still needs a decision.
 	const lastIn = inWindow.length > 0 ? eps.indexOf(inWindow[inWindow.length - 1]) : furthest;
-	const next = eps
+	const candidates = eps
 		.slice(lastIn + 1)
 		.filter((ep) => !ep.hasFile && !ep.monitored)
-		.filter((ep) => ep.airDateUtc && new Date(ep.airDateUtc) <= now)
-		.slice(0, show.batchSize);
+		.filter((ep) => ep.airDateUtc && new Date(ep.airDateUtc) <= now);
+
+	const next = [];
+	let blocked = null;
+	for (const ep of candidates) {
+		if (next.length >= show.batchSize) break;
+		if (show.filler) {
+			const abs = ep.absoluteEpisodeNumber;
+			if (!Number.isInteger(abs)) {
+				blocked = { action: 'error', reason: `S${ep.seasonNumber}E${ep.episodeNumber} has no absolute number` };
+				break;
+			}
+			if (show.filler.ask.has(abs) && !show.filler.download.has(abs)) {
+				blocked = { action: 'waiting_for_decision', reason: `episode ${abs} needs a filler decision` };
+				break;
+			}
+		}
+		next.push(ep);
+	}
+
+	if (next.length === 0 && blocked) {
+		return { action: blocked.action, monitorIds: [], reason: blocked.reason };
+	}
 
 	// 6. Nothing to add: finished show, or waiting for new episodes to air.
 	if (next.length === 0) {
